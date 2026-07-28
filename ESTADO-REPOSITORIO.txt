@@ -1,0 +1,23 @@
+EB GESTIÓN - ESTADO PARA GITHUB
+===============================
+
+LISTO
+- Código fuente limpio.
+- Ventana Windows con WebView2.
+- Servidor local conservado para teléfonos.
+- Datos separados de la instalación.
+- Archivos operacionales excluidos mediante .gitignore.
+- GitHub Actions configurado.
+- Instalador Inno Setup configurado.
+
+NO INCLUIDO A PROPÓSITO
+- Ejecutables antiguos.
+- ABRIR-EB-GESTION.bat.
+- data.json y respaldos.
+- Binario Linux.
+
+SIGUIENTE VALIDACIÓN
+- Subir este contenido al repositorio EBGESTION/eb-gestion.
+- Ejecutar GitHub Actions.
+- Descargar el artefacto EB-Gestion-Windows.
+- Instalar y confirmar que no se abre ningún navegador externo.

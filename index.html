@@ -1,0 +1,71 @@
+name: Construir EB Gestión para Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Compilar aplicación e instalador
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Instalar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Preparar dependencia WebView2
+        shell: pwsh
+        run: |
+          go get github.com/jchv/go-webview2@master
+          go mod tidy
+
+      - name: Verificar código
+        shell: pwsh
+        run: go test ./...
+
+      - name: Compilar aplicación Windows
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o dist/EBGestion.exe .
+          if (-not (Test-Path "dist/EBGestion.exe")) { throw "No se generó EBGestion.exe" }
+          Copy-Item LEEME-DESKTOP.txt dist/LEEME-DESKTOP.txt
+
+      - name: Instalar Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
+      - name: Crear instalador
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\EBGestion.iss
+          if (-not (Test-Path "dist/EBGestion-Setup.exe")) { throw "No se generó EBGestion-Setup.exe" }
+
+      - name: Generar comprobaciones SHA-256
+        shell: pwsh
+        run: |
+          Get-FileHash dist/EBGestion.exe -Algorithm SHA256 | Format-List | Out-File dist/SHA256.txt -Encoding utf8
+          Get-FileHash dist/EBGestion-Setup.exe -Algorithm SHA256 | Format-List | Out-File dist/SHA256.txt -Append -Encoding utf8
+
+      - name: Publicar ejecutable e instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: EB-Gestion-Windows
+          path: |
+            dist/EBGestion.exe
+            dist/EBGestion-Setup.exe
+            dist/LEEME-DESKTOP.txt
+            dist/SHA256.txt
+          if-no-files-found: error
+          retention-days: 30

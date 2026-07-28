@@ -1,0 +1,18 @@
+EB GESTIÓN - APLICACIÓN WINDOWS
+===============================
+
+1. Instale usando EBGestion-Setup.exe.
+2. Abra el acceso directo "EB Gestión".
+3. La aplicación debe abrirse en una ventana propia, sin Opera, Chrome ni Edge visible.
+4. Los datos se guardan en:
+   %LOCALAPPDATA%\EBGestion\data.json
+5. Los respaldos se guardan en:
+   %LOCALAPPDATA%\EBGestion\respaldos
+6. Para conectar un teléfono, ambos equipos deben usar la misma red Wi-Fi.
+7. Si Windows pregunta por el Firewall, permita el acceso en redes privadas.
+8. El teléfono debe ingresar a la dirección indicada por EB Gestión, normalmente:
+   http://IP-DEL-PC:8080
+
+REQUISITO
+---------
+Windows 10 u 11 con Microsoft Edge WebView2 Runtime. En la mayoría de los equipos actuales ya viene instalado.

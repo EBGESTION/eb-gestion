@@ -1,0 +1,19 @@
+# Ejecutables y compilaciones
+*.exe
+*.msi
+*.zip
+/dist/
+/build/
+
+# Datos operacionales: nunca deben quedar publicados en GitHub
+data.json
+data.json.bak
+/respaldos/
+/EBGestion-Datos/
+
+# Archivos del sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

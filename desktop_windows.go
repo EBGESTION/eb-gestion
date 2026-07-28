@@ -1,22 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520">
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <g stroke="#1e5fae" stroke-width="8">
-      <path d="M24 430c96-30 190-29 286 1s190 30 286 0 192-30 288 0 194 30 292 0"/>
-      <path d="M36 468c104-25 202-24 300 1s196 25 294 0 196-25 294 0 194 25 252 10" opacity=".7"/>
-      <path d="M122 330h286l-48 83H176z"/>
-      <path d="M188 330V216h116v114M226 216v-92M226 124l76 43h-76M159 286h220"/>
-      <path d="M530 356h210l-34 57H562zM581 356v-76h88v76M625 280v-61M625 219l53 31h-53"/>
-      <path d="M836 185v228M796 413h82M812 185h51l-17-65h-19zM786 444h102"/>
-      <path d="M920 240c34-24 66-24 98 0 35-24 69-24 103 0M55 180c27-20 54-20 81 0 28-20 57-20 85 0"/>
-    </g>
-    <g stroke="#ff7a00" stroke-width="7">
-      <path d="M974 110c-37 8-71 34-89 71-21 43-17 95 12 133 26 35 71 54 114 48 49-7 90-43 105-91 13-42 4-90-24-125-29-36-76-50-118-36z"/>
-      <path d="M994 145c-26 7-49 26-62 51-15 29-14 64 4 90 18 27 50 42 82 38 34-4 64-29 75-61 10-29 4-62-15-86-20-25-54-39-84-32z"/>
-      <path d="M930 309c-48 24-93 31-139 20 36-14 65-37 87-69M947 130c-31-35-67-52-111-51 32 17 58 41 75 73"/>
-      <circle cx="960" cy="178" r="7" fill="#ff7a00"/>
-      <path d="M918 195c-34 8-61 25-84 52M924 218c-29 17-52 40-68 69"/>
-      <path d="M1096 195c36-3 70 9 99 35-33-7-63-2-90 14"/>
-      <path d="M1036 352c27 29 60 43 99 42-28-13-50-32-65-57"/>
-    </g>
-  </g>
-</svg>
+//go:build windows
+
+package main
+
+import (
+	"errors"
+
+	webview2 "github.com/jchv/go-webview2"
+)
+
+// runDesktop abre EB Gestión dentro de una ventana propia de Windows.
+// El contenido continúa siendo servido por el servidor local de Go, por lo que
+// los teléfonos y otros computadores pueden usar el mismo sistema en paralelo.
+func runDesktop(url string) error {
+	window := webview2.NewWithOptions(webview2.WebViewOptions{
+		Debug:     false,
+		AutoFocus: true,
+		WindowOptions: webview2.WindowOptions{
+			Title:  "EB Gestión - Entre Bahías",
+			Width:  1366,
+			Height: 820,
+			Center: true,
+		},
+	})
+	if window == nil {
+		return errors.New("WebView2 no está disponible; instala Microsoft Edge WebView2 Runtime")
+	}
+	defer window.Destroy()
+
+	window.SetTitle("EB Gestión - Entre Bahías")
+	window.SetSize(1100, 700, webview2.HintMin)
+	window.SetSize(1366, 820, webview2.HintNone)
+	window.Navigate(url)
+	window.Run()
+	return nil
+}

@@ -1,16 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720">
-  <g fill="none" stroke="#ff7a00" stroke-linecap="round" stroke-linejoin="round">
-    <g stroke-width="8" opacity=".95">
-      <path d="M112 152c64-54 154-69 232-34 73 32 124 103 132 182 8 82-31 165-101 210-69 45-161 48-234 7 51-5 95-28 128-66 37-43 53-101 44-157-10-59-48-112-100-140-31-17-65-24-101-22z"/>
-      <path d="M168 186c45-30 103-35 153-13 51 23 87 70 94 126 7 57-18 116-64 151-46 35-108 44-162 24 42-14 76-43 96-82 22-43 24-94 5-139-21-49-65-86-122-99z"/>
-      <circle cx="184" cy="205" r="8" fill="#ff7a00"/>
-      <path d="M146 232c-40 13-72 35-98 67M153 258c-33 20-59 46-80 78"/>
-      <path d="M448 240c49-5 92 9 131 43-43-10-82-4-117 18"/>
-      <path d="M389 505c31 36 70 55 118 56-34-17-61-42-79-75"/>
-      <path d="M126 496c-52 22-101 26-149 9 40-11 74-33 101-66"/>
-      <path d="M181 155c-32-43-73-70-123-80 39 25 68 57 88 98"/>
-      <path d="M282 463c-12 53-5 102 20 147 4-42 21-79 51-111"/>
-      <path d="M351 442c8 47 29 86 64 116-10-38-7-74 9-108"/>
-    </g>
-  </g>
-</svg>
+//go:build !windows
+
+package main
+
+import (
+	"fmt"
+	"os/exec"
+	"runtime"
+)
+
+// runDesktop permite validar el servidor fuera de Windows. La aplicación final
+// usa WebView2 y se compila exclusivamente en el runner Windows de GitHub.
+func runDesktop(url string) error {
+	var command *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		command = exec.Command("open", url)
+	default:
+		command = exec.Command("xdg-open", url)
+	}
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("abre manualmente %s: %w", url, err)
+	}
+	return command.Wait()
+}

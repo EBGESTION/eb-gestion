@@ -1,0 +1,54 @@
+EB GESTIÓN — CARGA CORRECTA CON GITHUB DESKTOP
+================================================
+
+Este paquete conserva correctamente las carpetas:
+
+  .github/workflows/
+  installer/
+  web/
+
+IMPORTANTE
+----------
+No vuelvas a arrastrar estos archivos directamente a la página web de GitHub.
+La carga anterior dejó algunos archivos de las carpetas web e installer en la raíz
+y no subió el workflow oculto .github.
+
+PROCESO QUE HAREMOS JUNTOS
+--------------------------
+1. Instalar GitHub Desktop desde el sitio oficial.
+2. Iniciar sesión con la cuenta EBGESTION.
+3. Clonar el repositorio privado EBGESTION/eb-gestion.
+4. Eliminar dentro de la copia clonada los archivos de la carga anterior.
+5. Copiar TODO el contenido de esta carpeta dentro de la copia clonada.
+6. Verificar que existan exactamente estas rutas:
+     .github/workflows/build-windows.yml
+     installer/EBGestion.iss
+     web/index.html
+7. Crear el commit: "Corrige estructura y activa compilación Windows".
+8. Pulsar Push origin.
+9. Abrir la pestaña Actions en GitHub y revisar la compilación.
+
+NO COPIAR
+---------
+No copies la carpeta exterior completa dentro del repositorio.
+Debes copiar su contenido: .github, installer, web, main.go, go.mod, etc.
+
+SEGURIDAD DE DATOS
+------------------
+El archivo .gitignore evita subir:
+- data.json
+- respaldos
+- ejecutables
+- compilaciones temporales
+
+RESULTADO ESPERADO
+------------------
+GitHub Actions generará un artefacto llamado:
+
+  EB-Gestion-Windows
+
+que contendrá:
+- EBGestion.exe
+- EBGestion-Setup.exe
+- LEEME-DESKTOP.txt
+- SHA256.txt

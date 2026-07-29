@@ -17,8 +17,8 @@ func runDesktop(url string) error {
 		AutoFocus: true,
 		WindowOptions: webview2.WindowOptions{
 			Title:  "EB Gestión - Entre Bahías",
-			Width:  1366,
-			Height: 820,
+			Width:  1180,
+			Height: 740,
 			Center: true,
 		},
 	})
@@ -28,8 +28,10 @@ func runDesktop(url string) error {
 	defer window.Destroy()
 
 	window.SetTitle("EB Gestión - Entre Bahías")
-	window.SetSize(1100, 700, webview2.HintMin)
-	window.SetSize(1366, 820, webview2.HintNone)
+	// Una ventana inicial más compacta evita que Windows/WebView2 la escale
+	// fuera del área útil en notebooks o pantallas con ampliación de DPI.
+	window.SetSize(960, 620, webview2.HintMin)
+	window.SetSize(1180, 740, webview2.HintNone)
 	window.Navigate(url)
 	window.Run()
 	return nil

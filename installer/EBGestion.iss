@@ -1,5 +1,5 @@
 #define MyAppName "EB Gestión"
-#define MyAppVersion "0.9.0 Beta Operativa OP1"
+#define MyAppVersion "0.9.0 Beta Operativa OP2"
 #define MyAppPublisher "Restaurante Entre Bahías"
 #define MyAppExeName "EBGestion.exe"
 
@@ -20,12 +20,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
-
 CloseApplications=force
-CloseApplicationsFilter=*.exe
 RestartApplications=no
-VersionInfoVersion=0.9.0.1
-VersionInfoDescription=EB Gestión Beta Operativa OP1
 
 [Files]
 Source: "..\dist\EBGestion.exe"; DestDir: "{app}"; Flags: ignoreversion

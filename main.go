@@ -546,7 +546,7 @@ func main() {
 		writeJSON(w, 200, map[string]string{"username": u.Username, "name": u.Name, "role": u.Role})
 	}))
 	mux.HandleFunc("/api/system", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "1.0 Estabilidad 1", "lanIP": lanIP()})
+		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "Beta Operativa 0.9.0 OP1", "lanIP": lanIP()})
 	}))
 	mux.HandleFunc("/api/backups", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -1500,13 +1500,7 @@ func main() {
 	}))
 
 	sub, _ := fs.Sub(embedded, "web")
-	staticFiles := http.FileServer(http.FS(sub))
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Expires", "0")
-		staticFiles.ServeHTTP(w, r)
-	}))
+	mux.Handle("/", http.FileServer(http.FS(sub)))
 	port := 8080
 	for ; port <= 8090; port++ {
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
@@ -1516,7 +1510,7 @@ func main() {
 
 		ip := lanIP()
 		localURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-		fmt.Printf("\nEB Gestión 1.0 Desktop - Entre Bahías activa\nPC: %s\nTeléfono: http://%s:%d\nDatos: %s\nRespaldos: %s\n\n", localURL, ip, port, dataDir, app.backupDir())
+		fmt.Printf("\nEB Gestión Beta Operativa 0.9.0 OP1 - Entre Bahías activa\nPC: %s\nTeléfono: http://%s:%d\nDatos: %s\nRespaldos: %s\n\n", localURL, ip, port, dataDir, app.backupDir())
 
 		serveErr := make(chan error, 1)
 		go func() {

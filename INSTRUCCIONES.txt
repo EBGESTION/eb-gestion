@@ -1,34 +1,24 @@
-EB GESTIÓN — CORRECCIÓN URGENTE VALIDADA
+EB GESTIÓN - ARREGLO OP1
 
-Archivos modificados:
-- main.go
+ARCHIVOS MODIFICADOS:
 - web/index.html
+- main.go
+- installer/EBGestion.iss
 
-Cambios incluidos:
-1. En Nueva solicitud, el botón “+ Agregar producto” aparece ANTES del listado.
-2. Los productos se agregan al final y la lista crece hacia abajo.
-3. La ventana de Nueva solicitud crece desde la parte superior, evitando el efecto visual de que los productos suben.
-4. Botón verde “Excel” visible en el historial de solicitudes.
-5. Botón verde “Descargar Excel” visible en el detalle de cada solicitud.
-6. Se restauraron las funciones faltantes de Nueva solicitud y Plantillas.
-7. Se deshabilitó la caché de la interfaz para evitar que PC o teléfonos muestren una versión anterior.
+CAMBIOS:
+1. Se restauró la función Nueva solicitud que faltaba en el código actual.
+2. El botón + Agregar producto queda antes del listado.
+3. Los productos se agregan debajo, en orden descendente visual natural.
+4. Se mantienen los botones Excel en historial y detalle.
+5. Se agregó sello visible Build 0.9.0-OP1 para confirmar que se abrió la versión nueva.
+6. El instalador fuerza el cierre de EBGestion.exe y no reinicia una copia anterior.
 
-APLICACIÓN:
-1. Cerrar EB Gestión.
-2. Descomprimir este ZIP.
-3. Copiar main.go y la carpeta web dentro de C:\Proyectos\eb-gestion.
-4. Aceptar reemplazar main.go y web\index.html.
-5. Abrir GitHub Desktop. Deben aparecer EXACTAMENTE 2 archivos modificados:
-   - main.go
-   - web/index.html
-6. Summary: Corrección urgente solicitudes hacia abajo y Excel
-7. Commit to main → Push origin.
-8. GitHub web → Actions → abrir la ejecución más reciente → descargar Artifact.
-9. Descomprimir el Artifact y ejecutar EBGestion-Setup.exe.
-10. Abrir EB Gestión desde el acceso directo instalado.
-
-PRUEBA:
-- Abrir Nueva solicitud: “+ Agregar producto” debe estar arriba del primer producto.
-- Agregar 5 productos: deben aparecer 1, 2, 3, 4 y 5 hacia abajo.
-- Enviar la solicitud y entrar a Solicitudes: debe verse el botón verde Excel.
-- Abrir Revisar: debe verse el botón verde Descargar Excel.
+PASOS:
+1. Cerrar EB Gestión completamente.
+2. Copiar main.go y las carpetas web e installer en C:\Proyectos\eb-gestion.
+3. Aceptar reemplazar los tres archivos.
+4. GitHub Desktop: Commit y Push.
+5. GitHub Actions: descargar el Artifact más reciente.
+6. Antes de instalar, confirmar que EB Gestión esté cerrado.
+7. Ejecutar EBGestion-Setup.exe.
+8. Al abrir, verificar que arriba se vea: Build 0.9.0-OP1.

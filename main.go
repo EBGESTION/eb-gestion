@@ -199,8 +199,8 @@ func seed() Store {
 		Products: []Product{
 			{ID: 1, Code: "P001", Name: "Salmón Atlántico", Category: "Congelados", Unit: "Kg", Warehouse: "Congelados", Stock: 25, MinStock: 10, Cost: 11250, MainSupplierID: 1, AlternateSupplierIDs: []int{2}, Active: true},
 			{ID: 2, Code: "P002", Name: "Camarón 51/60", Category: "Congelados", Unit: "Kg", Warehouse: "Congelados", Stock: 12, MinStock: 5, Cost: 8900, MainSupplierID: 1, Active: true},
-			{ID: 3, Code: "P003", Name: "Arroz G1", Category: "Abarrotes", Unit: "Kg", Warehouse: "Abarrotes", Stock: 45, MinStock: 20, Cost: 1450, MainSupplierID: 2, AlternateSupplierIDs: []int{3}, Active: true},
-			{ID: 4, Code: "P004", Name: "Aceite Vegetal 1L", Category: "Abarrotes", Unit: "Botella", Warehouse: "Abarrotes", Stock: 8, MinStock: 5, Cost: 1900, MainSupplierID: 2, Active: true},
+			{ID: 3, Code: "P003", Name: "Arroz G1", Category: "Abarrotes", Unit: "Kg", Warehouse: "Abarrotes y Aseo", Stock: 45, MinStock: 20, Cost: 1450, MainSupplierID: 2, AlternateSupplierIDs: []int{3}, Active: true},
+			{ID: 4, Code: "P004", Name: "Aceite Vegetal 1L", Category: "Abarrotes", Unit: "Botella", Warehouse: "Abarrotes y Aseo", Stock: 8, MinStock: 5, Cost: 1900, MainSupplierID: 2, Active: true},
 			{ID: 5, Code: "P005", Name: "Limón", Category: "Verduras", Unit: "Kg", Warehouse: "Cocina", Stock: 15, MinStock: 7, Cost: 1200, MainSupplierID: 3, Active: true},
 			{ID: 6, Code: "P006", Name: "Guantes", Category: "Aseo", Unit: "Caja", Warehouse: "Cocina", Stock: 6, MinStock: 3, Cost: 4500, MainSupplierID: 2, Active: true},
 		},
@@ -229,6 +229,10 @@ func newApp(path string) *App {
 			}
 		}
 		for i := range a.store.Products {
+			// Migra la bodega histórica sin perder productos ni movimientos.
+			if strings.TrimSpace(a.store.Products[i].Warehouse) == "Abarrotes" {
+				a.store.Products[i].Warehouse = "Abarrotes y Aseo"
+			}
 			if strings.TrimSpace(a.store.Products[i].Category) == "" {
 				a.store.Products[i].Category = a.store.Products[i].Warehouse
 			}
@@ -240,6 +244,18 @@ func newApp(path string) *App {
 			a.store.Purchases = []PurchaseOrder{}
 		}
 		for i := range a.store.Purchases {
+			for j := range a.store.Purchases[i].Items {
+				if strings.TrimSpace(a.store.Purchases[i].Items[j].Warehouse) == "Abarrotes" {
+					a.store.Purchases[i].Items[j].Warehouse = "Abarrotes y Aseo"
+				}
+			}
+			for j := range a.store.Purchases[i].Receipts {
+				for k := range a.store.Purchases[i].Receipts[j].Items {
+					if strings.TrimSpace(a.store.Purchases[i].Receipts[j].Items[k].Warehouse) == "Abarrotes" {
+						a.store.Purchases[i].Receipts[j].Items[k].Warehouse = "Abarrotes y Aseo"
+					}
+				}
+			}
 			if a.store.Purchases[i].Items == nil {
 				a.store.Purchases[i].Items = []PurchaseItem{}
 			}

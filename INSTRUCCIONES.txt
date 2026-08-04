@@ -1,27 +1,20 @@
-EB GESTIÓN · BUILD 0.4.0 · AJUSTE DE ESCRITORIO
+EB GESTIÓN - ACTUALIZACIÓN DE BODEGAS
 
-Archivos modificados:
-1. desktop_windows.go
-2. web/index.html
+Bodegas definitivas:
+- Congelados
+- Abarrotes y Aseo
+- Líquidos
+- Envases
+- Cocina
+- Mantención
 
-Pasos:
-1. Abre la carpeta local del repositorio eb-gestion.
-2. Reemplaza desktop_windows.go en la raíz.
-3. Reemplaza web/index.html dentro de la carpeta web.
-4. En GitHub Desktop revisa que aparezcan solo esos dos archivos modificados.
-5. Commit sugerido: Build 0.4.0 ajuste de escritorio
-6. Push origin.
-7. Espera GitHub Actions y descarga el nuevo instalador.
+La actualización migra automáticamente los productos que estaban en la antigua bodega "Abarrotes" a "Abarrotes y Aseo". No elimina productos, proveedores, stock ni movimientos.
 
-Cambios incluidos:
-- Ventana inicial reducida de 1366x820 a 1180x740.
-- Tamaño mínimo ajustado a 960x620.
-- Menú lateral más compacto.
-- Logo lateral reducido en escritorio.
-- Textos del menú con ajuste de línea para evitar cortes.
-- Desplazamiento vertical en el menú cuando la pantalla es baja.
-- Ajuste adicional para pantallas con menos de 720 px de alto.
-- No se modificó la lógica de solicitudes, inventario, compras ni sincronización.
-
-Validación técnica:
-- go test ./... completado correctamente.
+PASOS:
+1. Cerrar EB Gestión.
+2. Copiar main.go y la carpeta web dentro de C:\Proyectos\eb-gestion.
+3. Aceptar reemplazar main.go y web\index.html.
+4. Abrir GitHub Desktop.
+5. Summary: "Separar bodegas Abarrotes, Líquidos y Envases"
+6. Commit to main, Push origin, Actions, descargar el Artifact y ejecutar EBGestion-Setup.exe.
+7. En el instalador, permitir que cierre EB Gestión si aparece el aviso.

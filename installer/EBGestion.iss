@@ -1,5 +1,5 @@
 #define MyAppName "EB Gestión"
-#define MyAppVersion "0.9.0 Beta Operativa OP2"
+#define MyAppVersion "0.9.0 Beta Operativa"
 #define MyAppPublisher "Restaurante Entre Bahías"
 #define MyAppExeName "EBGestion.exe"
 
@@ -22,9 +22,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
 CloseApplications=force
 RestartApplications=no
+SetupLogging=yes
 
 [Files]
-Source: "..\dist\EBGestion.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\EBGestion.exe"; DestDir: "{app}"; Flags: ignoreversion restartreplace
 Source: "..\dist\LEEME-DESKTOP.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

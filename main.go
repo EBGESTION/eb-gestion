@@ -546,7 +546,7 @@ func main() {
 		writeJSON(w, 200, map[string]string{"username": u.Username, "name": u.Name, "role": u.Role})
 	}))
 	mux.HandleFunc("/api/system", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "Beta Operativa 0.9.0 OP1", "lanIP": lanIP()})
+		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "1.0 Estabilidad 1", "lanIP": lanIP()})
 	}))
 	mux.HandleFunc("/api/backups", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -1510,7 +1510,7 @@ func main() {
 
 		ip := lanIP()
 		localURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-		fmt.Printf("\nEB Gestión Beta Operativa 0.9.0 OP1 - Entre Bahías activa\nPC: %s\nTeléfono: http://%s:%d\nDatos: %s\nRespaldos: %s\n\n", localURL, ip, port, dataDir, app.backupDir())
+		fmt.Printf("\nEB Gestión 1.0 Desktop - Entre Bahías activa\nPC: %s\nTeléfono: http://%s:%d\nDatos: %s\nRespaldos: %s\n\n", localURL, ip, port, dataDir, app.backupDir())
 
 		serveErr := make(chan error, 1)
 		go func() {

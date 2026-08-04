@@ -1,0 +1,15 @@
+EB GESTIÓN - CORRECCIÓN MENÚ MÓVIL
+
+Cambio realizado:
+- El botón de menú ahora abre el panel lateral real, no el elemento interno de navegación.
+- Se eliminaron dependencias de variables automáticas del navegador que fallan en algunos teléfonos.
+- Se reforzó la compatibilidad táctil y el cierre por capa oscura, botón de módulo, tecla Escape y cambio de tamaño.
+
+Archivo a reemplazar:
+web/index.html
+
+Validaciones realizadas:
+- Sintaxis JavaScript: correcta.
+- go test ./...: correcto.
+
+No modifica productos, proveedores, stock, solicitudes ni datos.

@@ -229,9 +229,13 @@ func newApp(path string) *App {
 			}
 		}
 		for i := range a.store.Products {
-			// Migra la bodega histórica sin perder productos ni movimientos.
-			if strings.TrimSpace(a.store.Products[i].Warehouse) == "Abarrotes" {
+			// Migra nombres históricos de bodegas sin perder productos ni movimientos.
+			warehouse := strings.ToLower(strings.TrimSpace(a.store.Products[i].Warehouse))
+			switch warehouse {
+			case "abarrotes", "abarrotes y líquidos", "abarrotes y liquidos":
 				a.store.Products[i].Warehouse = "Abarrotes y Aseo"
+			case "barra":
+				a.store.Products[i].Warehouse = "Líquidos"
 			}
 			if strings.TrimSpace(a.store.Products[i].Category) == "" {
 				a.store.Products[i].Category = a.store.Products[i].Warehouse
@@ -245,14 +249,22 @@ func newApp(path string) *App {
 		}
 		for i := range a.store.Purchases {
 			for j := range a.store.Purchases[i].Items {
-				if strings.TrimSpace(a.store.Purchases[i].Items[j].Warehouse) == "Abarrotes" {
+				warehouse := strings.ToLower(strings.TrimSpace(a.store.Purchases[i].Items[j].Warehouse))
+				switch warehouse {
+				case "abarrotes", "abarrotes y líquidos", "abarrotes y liquidos":
 					a.store.Purchases[i].Items[j].Warehouse = "Abarrotes y Aseo"
+				case "barra":
+					a.store.Purchases[i].Items[j].Warehouse = "Líquidos"
 				}
 			}
 			for j := range a.store.Purchases[i].Receipts {
 				for k := range a.store.Purchases[i].Receipts[j].Items {
-					if strings.TrimSpace(a.store.Purchases[i].Receipts[j].Items[k].Warehouse) == "Abarrotes" {
+					warehouse := strings.ToLower(strings.TrimSpace(a.store.Purchases[i].Receipts[j].Items[k].Warehouse))
+					switch warehouse {
+					case "abarrotes", "abarrotes y líquidos", "abarrotes y liquidos":
 						a.store.Purchases[i].Receipts[j].Items[k].Warehouse = "Abarrotes y Aseo"
+					case "barra":
+						a.store.Purchases[i].Receipts[j].Items[k].Warehouse = "Líquidos"
 					}
 				}
 			}

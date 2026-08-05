@@ -1,20 +1,31 @@
-EB GESTIÓN - ACTUALIZACIÓN DE BODEGAS
+EB GESTIÓN - ACTUALIZACIÓN OPERATIVA
 
-Bodegas definitivas:
-- Congelados
-- Abarrotes y Aseo
-- Líquidos
-- Envases
-- Cocina
-- Mantención
+CAMBIOS INCLUIDOS
+1. Bodegas definitivas:
+   - Congelados
+   - Abarrotes y Aseo
+   - Líquidos
+   - Envases
+   - Cocina
+   - Mantención
 
-La actualización migra automáticamente los productos que estaban en la antigua bodega "Abarrotes" a "Abarrotes y Aseo". No elimina productos, proveedores, stock ni movimientos.
+2. Migración automática de nombres antiguos:
+   - Abarrotes / Abarrotes y líquidos -> Abarrotes y Aseo
+   - Barra -> Líquidos
 
-PASOS:
+3. La cuenta Administrador / Bodega puede crear solicitudes desde su propia sesión.
+
+INSTALACIÓN EN EL PROYECTO
 1. Cerrar EB Gestión.
 2. Copiar main.go y la carpeta web dentro de C:\Proyectos\eb-gestion.
 3. Aceptar reemplazar main.go y web\index.html.
-4. Abrir GitHub Desktop.
-5. Summary: "Separar bodegas Abarrotes, Líquidos y Envases"
-6. Commit to main, Push origin, Actions, descargar el Artifact y ejecutar EBGestion-Setup.exe.
-7. En el instalador, permitir que cierre EB Gestión si aparece el aviso.
+4. En GitHub Desktop usar el resumen:
+   Bodegas definitivas y solicitudes para Administrador Bodega
+5. Commit to main y luego Push origin.
+6. Esperar el visto verde en GitHub Actions.
+7. Descargar el Artifact más reciente y ejecutar EBGestion-Setup.exe.
+
+PRUEBAS
+- Crear o editar un producto y revisar las seis bodegas.
+- Entrar con la cuenta de Stefy, abrir Solicitudes y confirmar que aparece + Nueva solicitud.
+- Crear una solicitud corta y comprobar que queda registrada a nombre de Stefy / Bodega.

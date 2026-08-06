@@ -1,0 +1,19 @@
+EB GESTIÓN - BUILD 0.9.1
+Corrección aislada: Compras sugeridas
+
+ESTA ACTUALIZACIÓN CONTIENE UN SOLO ARCHIVO PARA REEMPLAZAR:
+ACTUALIZACION\web\index.html
+
+NO COPIAR LA CARPETA ACTUALIZACION COMPLETA.
+NO COPIAR LEEME-PRIMERO.txt AL PROYECTO.
+NO TOCAR main.go, installer, go.mod, .git NI OTROS ARCHIVOS.
+
+RESULTADO ESPERADO:
+- Stock mayor al mínimo: no sugerir compra.
+- Stock igual al mínimo: no sugerir compra.
+- Stock menor al mínimo: sugerir mínimo menos stock actual.
+
+Ejemplos:
+- Stock 1 / mínimo 1: no sugerir.
+- Stock 0 / mínimo 1: sugerir 1.
+- Stock 1 / mínimo 6: sugerir 5.

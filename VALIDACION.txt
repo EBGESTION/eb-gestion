@@ -1,0 +1,8 @@
+VALIDACIÓN TÉCNICA REALIZADA
+
+- Base usada: eb-gestion (5).zip, última versión estable entregada por Stefy.
+- Cambio aplicado: un solo operador en web/index.html (<= cambiado a <).
+- JavaScript revisado con node --check: sin errores de sintaxis.
+- No se modificó main.go.
+- No se modificó la base de datos.
+- No se incluyó el módulo Gastos.

@@ -1,0 +1,32 @@
+ANTES DE COPIAR LA ACTUALIZACIÓN
+
+IMPORTANTE: si GitHub Desktop todavía muestra un commit local llamado 0.9.1 pendiente de Push, NO copies todavía este archivo. Primero elimina ese commit local siguiendo las instrucciones entregadas en el chat.
+
+CUANDO GITHUB DESKTOP ESTÉ LIMPIO Y SIN COMMITS PENDIENTES:
+
+1. Cierra EB Gestión.
+2. Cierra GitHub Desktop.
+3. Abre este ZIP.
+4. Entra en ACTUALIZACION, luego en web.
+5. Copia SOLO el archivo index.html.
+6. Ve a C:\Proyectos\eb-gestion\web
+7. Pega index.html y elige "Reemplazar el archivo en el destino".
+8. Abre GitHub Desktop.
+9. En Changes debe aparecer EXACTAMENTE un archivo: web/index.html.
+10. Escribe como Summary:
+    Build 0.9.1 - corregir compras sugeridas
+11. Haz clic en Commit to main.
+12. Haz clic en Push origin.
+13. En GitHub Actions espera el check verde.
+14. Descarga el Artifact más reciente e instala EBGestion-Setup.exe.
+15. Revisa Compras sugeridas:
+    - Los productos con stock igual al mínimo no deben aparecer.
+    - Los productos con stock menor al mínimo deben sugerir solo la diferencia.
+
+NO COPIAR:
+- main.go
+- installer
+- go.mod
+- .git
+- archivos .md
+- ningún otro archivo

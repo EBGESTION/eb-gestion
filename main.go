@@ -85,13 +85,37 @@ type PurchaseReceiptItem struct {
 	Note      string  `json:"note"`
 }
 type PurchaseReceipt struct {
-	ID         int                   `json:"id"`
-	ReceivedAt string                `json:"receivedAt"`
-	ReceivedBy string                `json:"receivedBy"`
-	Document   string                `json:"document"`
-	Note       string                `json:"note"`
-	Items      []PurchaseReceiptItem `json:"items"`
-	Total      float64               `json:"total"`
+	ID            int                   `json:"id"`
+	ReceivedAt    string                `json:"receivedAt"`
+	ReceivedBy    string                `json:"receivedBy"`
+	Document      string                `json:"document"`
+	IssueDate     string                `json:"issueDate"`
+	DueDate       string                `json:"dueDate"`
+	PaymentMethod string                `json:"paymentMethod"`
+	PaymentStatus string                `json:"paymentStatus"`
+	PaymentDate   string                `json:"paymentDate"`
+	Note          string                `json:"note"`
+	Items         []PurchaseReceiptItem `json:"items"`
+	Total         float64               `json:"total"`
+}
+type Expense struct {
+	ID            int     `json:"id"`
+	Source        string  `json:"source"`
+	Category      string  `json:"category"`
+	SupplierID    int     `json:"supplierId"`
+	SupplierName  string  `json:"supplierName"`
+	Document      string  `json:"document"`
+	IssueDate     string  `json:"issueDate"`
+	DueDate       string  `json:"dueDate"`
+	Amount        float64 `json:"amount"`
+	PaymentMethod string  `json:"paymentMethod"`
+	Status        string  `json:"status"`
+	PaymentDate   string  `json:"paymentDate"`
+	Note          string  `json:"note"`
+	PurchaseID    int     `json:"purchaseId"`
+	ReceiptID     int     `json:"receiptId"`
+	CreatedAt     string  `json:"createdAt"`
+	CreatedBy     string  `json:"createdBy"`
 }
 type PriceHistory struct {
 	ID           int     `json:"id"`
@@ -168,6 +192,7 @@ type Store struct {
 	Suppliers         []Supplier          `json:"suppliers"`
 	Purchases         []PurchaseOrder     `json:"purchases"`
 	PriceHistory      []PriceHistory      `json:"priceHistory"`
+	Expenses          []Expense           `json:"expenses"`
 	Requests          []Request           `json:"requests"`
 	Movements         []Movement          `json:"movements"`
 	Audit             []Audit             `json:"audit"`
@@ -205,7 +230,7 @@ func seed() Store {
 			{ID: 6, Code: "P006", Name: "Guantes", Category: "Aseo", Unit: "Caja", Warehouse: "Cocina", Stock: 6, MinStock: 3, Cost: 4500, MainSupplierID: 2, Active: true},
 		},
 		Suppliers: []Supplier{{ID: 1, Name: "Proveedor Congelados", BusinessName: "Proveedor Congelados SpA", Category: "Congelados", Contact: "Ventas", OrderDays: []string{"Lunes", "Miércoles"}, OrderDeadline: "12:00", DeliveryDays: []string{"Martes", "Jueves"}, PaymentMethod: "Transferencia", Active: true}, {ID: 2, Name: "Distribuidora Abarrotes", BusinessName: "Distribuidora Abarrotes Ltda.", Category: "Abarrotes", Contact: "Ventas", OrderDays: []string{"Lunes", "Martes", "Miércoles", "Jueves"}, OrderDeadline: "12:00", DeliveryDays: []string{"Martes", "Viernes"}, PaymentMethod: "Transferencia", Active: true}, {ID: 3, Name: "Proveedor Verduras", BusinessName: "Proveedor Verduras", Category: "Verduras", Contact: "Ventas", OrderDays: []string{"Lunes", "Miércoles", "Viernes"}, OrderDeadline: "11:00", DeliveryDays: []string{"Martes", "Jueves", "Sábado"}, PaymentMethod: "Contado", Active: true}},
-		Purchases: []PurchaseOrder{}, PriceHistory: []PriceHistory{}, Requests: []Request{}, Movements: []Movement{}, Audit: []Audit{}, NotificationReads: map[string][]string{},
+		Purchases: []PurchaseOrder{}, PriceHistory: []PriceHistory{}, Expenses: []Expense{}, Requests: []Request{}, Movements: []Movement{}, Audit: []Audit{}, NotificationReads: map[string][]string{},
 	}
 }
 
@@ -246,6 +271,9 @@ func newApp(path string) *App {
 		}
 		if a.store.Purchases == nil {
 			a.store.Purchases = []PurchaseOrder{}
+		}
+		if a.store.Expenses == nil {
+			a.store.Expenses = []Expense{}
 		}
 		for i := range a.store.Purchases {
 			for j := range a.store.Purchases[i].Items {
@@ -405,6 +433,16 @@ func (a *App) nextPurchaseIDLocked() int {
 	}
 	return maxID + 1
 }
+func (a *App) nextExpenseIDLocked() int {
+	maxID := 0
+	for _, e := range a.store.Expenses {
+		if e.ID > maxID {
+			maxID = e.ID
+		}
+	}
+	return maxID + 1
+}
+
 func purchaseTotal(items []PurchaseItem) float64 {
 	total := 0.0
 	for _, it := range items {
@@ -930,6 +968,26 @@ func main() {
 						notes = append(notes, notice{fmt.Sprintf("purchase:%d:%s", po.ID, po.Status), "📦", po.Number + " pendiente de recepción", po.ExpectedDate})
 					}
 				}
+				todayDate := time.Now().Truncate(24 * time.Hour)
+				for _, e := range app.store.Expenses {
+					if e.Status != "pendiente" || strings.TrimSpace(e.DueDate) == "" {
+						continue
+					}
+					due, err := time.Parse("2006-01-02", e.DueDate)
+					if err != nil {
+						continue
+					}
+					days := int(due.Sub(todayDate).Hours() / 24)
+					if days <= 7 {
+						label := "vence en " + strconv.Itoa(days) + " días"
+						if days < 0 {
+							label = "vencida"
+						} else if days == 0 {
+							label = "vence hoy"
+						}
+						notes = append(notes, notice{fmt.Sprintf("expense:%d:%s", e.ID, e.DueDate), "💰", e.SupplierName + " · " + label, e.DueDate})
+					}
+				}
 			}
 			return notes
 		}
@@ -1274,11 +1332,16 @@ func main() {
 				return
 			}
 			var in struct {
-				Document    string `json:"document"`
-				Note        string `json:"note"`
-				CloseOrder  bool   `json:"closeOrder"`
-				CloseReason string `json:"closeReason"`
-				Items       []struct {
+				Document      string `json:"document"`
+				IssueDate     string `json:"issueDate"`
+				DueDate       string `json:"dueDate"`
+				PaymentMethod string `json:"paymentMethod"`
+				PaymentStatus string `json:"paymentStatus"`
+				PaymentDate   string `json:"paymentDate"`
+				Note          string `json:"note"`
+				CloseOrder    bool   `json:"closeOrder"`
+				CloseReason   string `json:"closeReason"`
+				Items         []struct {
 					ProductID int     `json:"productId"`
 					Quantity  float64 `json:"quantity"`
 					UnitPrice float64 `json:"unitPrice"`
@@ -1289,7 +1352,7 @@ func main() {
 				writeJSON(w, 400, map[string]string{"error": "Ingresa las cantidades recibidas"})
 				return
 			}
-			receipt := PurchaseReceipt{ID: len(po.Receipts) + 1, ReceivedAt: now(), ReceivedBy: u.Name, Document: strings.TrimSpace(in.Document), Note: strings.TrimSpace(in.Note), Items: []PurchaseReceiptItem{}}
+			receipt := PurchaseReceipt{ID: len(po.Receipts) + 1, ReceivedAt: now(), ReceivedBy: u.Name, Document: strings.TrimSpace(in.Document), IssueDate: strings.TrimSpace(in.IssueDate), DueDate: strings.TrimSpace(in.DueDate), PaymentMethod: strings.TrimSpace(in.PaymentMethod), PaymentStatus: strings.TrimSpace(in.PaymentStatus), PaymentDate: strings.TrimSpace(in.PaymentDate), Note: strings.TrimSpace(in.Note), Items: []PurchaseReceiptItem{}}
 			anyReceived := false
 			for _, row := range in.Items {
 				var item *PurchaseItem
@@ -1362,6 +1425,19 @@ func main() {
 			} else {
 				po.Status = "parcial"
 			}
+			status := receipt.PaymentStatus
+			if status != "pagada" {
+				status = "pendiente"
+			}
+			issueDate := receipt.IssueDate
+			if issueDate == "" {
+				issueDate = time.Now().Format("2006-01-02")
+			}
+			exp := Expense{ID: app.nextExpenseIDLocked(), Source: "compra", Category: "Compra de mercadería", SupplierID: po.SupplierID, SupplierName: po.SupplierName, Document: receipt.Document, IssueDate: issueDate, DueDate: receipt.DueDate, Amount: receipt.Total, PaymentMethod: receipt.PaymentMethod, Status: status, PaymentDate: receipt.PaymentDate, Note: receipt.Note, PurchaseID: po.ID, ReceiptID: receipt.ID, CreatedAt: now(), CreatedBy: u.Name}
+			if exp.Status == "pagada" && exp.PaymentDate == "" {
+				exp.PaymentDate = issueDate
+			}
+			app.store.Expenses = append(app.store.Expenses, exp)
 			app.auditLocked(u.Name, fmt.Sprintf("Registró recepción de %s por $%.0f", po.Number, receipt.Total))
 			_ = app.saveLocked()
 			writeJSON(w, 200, po)
@@ -1454,6 +1530,92 @@ func main() {
 		default:
 			http.NotFound(w, r)
 		}
+	}))
+	mux.HandleFunc("/api/expenses", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			app.mu.RLock()
+			defer app.mu.RUnlock()
+			rows := make([]Expense, len(app.store.Expenses))
+			for i := range app.store.Expenses {
+				rows[len(rows)-1-i] = app.store.Expenses[i]
+			}
+			writeJSON(w, 200, rows)
+		case "POST":
+			var in Expense
+			if readJSON(r, &in) != nil || strings.TrimSpace(in.SupplierName) == "" || in.Amount < 0 {
+				writeJSON(w, 400, map[string]string{"error": "Completa proveedor o servicio y monto"})
+				return
+			}
+			u := app.current(r)
+			app.mu.Lock()
+			defer app.mu.Unlock()
+			in.ID = app.nextExpenseIDLocked()
+			in.Source = "manual"
+			in.CreatedAt = now()
+			in.CreatedBy = u.Name
+			if in.Status != "pagada" {
+				in.Status = "pendiente"
+			}
+			if in.Status == "pagada" && in.PaymentDate == "" {
+				in.PaymentDate = time.Now().Format("2006-01-02")
+			}
+			app.store.Expenses = append(app.store.Expenses, in)
+			app.auditLocked(u.Name, "Registró gasto "+in.SupplierName)
+			_ = app.saveLocked()
+			writeJSON(w, 201, in)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	mux.HandleFunc("/api/expenses/", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/expenses/"), "/"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		u := app.current(r)
+		app.mu.Lock()
+		defer app.mu.Unlock()
+		var e *Expense
+		for i := range app.store.Expenses {
+			if app.store.Expenses[i].ID == id {
+				e = &app.store.Expenses[i]
+				break
+			}
+		}
+		if e == nil {
+			writeJSON(w, 404, map[string]string{"error": "Gasto no encontrado"})
+			return
+		}
+		if r.Method == "PUT" {
+			var in Expense
+			if readJSON(r, &in) != nil {
+				writeJSON(w, 400, map[string]string{"error": "Datos inválidos"})
+				return
+			}
+			e.Category = in.Category
+			e.SupplierName = in.SupplierName
+			e.Document = in.Document
+			e.IssueDate = in.IssueDate
+			e.DueDate = in.DueDate
+			e.Amount = in.Amount
+			e.PaymentMethod = in.PaymentMethod
+			e.Status = in.Status
+			e.PaymentDate = in.PaymentDate
+			e.Note = in.Note
+			if e.Status != "pagada" {
+				e.Status = "pendiente"
+				e.PaymentDate = ""
+			} else if e.PaymentDate == "" {
+				e.PaymentDate = time.Now().Format("2006-01-02")
+			}
+			app.auditLocked(u.Name, "Actualizó gasto "+e.SupplierName)
+			_ = app.saveLocked()
+			writeJSON(w, 200, e)
+			return
+		}
+		http.NotFound(w, r)
 	}))
 	mux.HandleFunc("/api/movements", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {

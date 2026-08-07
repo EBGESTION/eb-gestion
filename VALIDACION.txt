@@ -6,3 +6,4 @@ VALIDACIÓN TÉCNICA REALIZADA
 - No se modificó main.go.
 - No se modificó la base de datos.
 - No se incluyó el módulo Gastos.
+- Prueba GitHub 07-08-2026

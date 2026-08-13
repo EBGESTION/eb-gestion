@@ -1,0 +1,12 @@
+EB Gestión 0.9.2 · Puesta en marcha
+
+Esta versión incorpora las correcciones necesarias para iniciar el uso operativo:
+- recepción de compras con diferencias y cantidades reales;
+- compras sugeridas revisables y opción “no comprar hoy”;
+- notificaciones priorizadas y navegables;
+- inventario físico general por bodega;
+- gastos con eliminación controlada;
+- perfiles Gerencia, Administración, Bodega, Cocina y Caja;
+- contraseñas individuales administrables.
+
+Antes de instalar una nueva versión, cree un respaldo desde EB Gestión.

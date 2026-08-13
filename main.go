@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +28,13 @@ type User struct {
 	Name     string `json:"name"`
 	Role     string `json:"role"`
 	Password string `json:"-"`
+}
+type Account struct {
+	Username     string `json:"username"`
+	Name         string `json:"name"`
+	Role         string `json:"role"`
+	PasswordHash string `json:"passwordHash"`
+	Active       bool   `json:"active"`
 }
 type Product struct {
 	ID                   int     `json:"id"`
@@ -197,6 +206,8 @@ type Store struct {
 	Movements         []Movement          `json:"movements"`
 	Audit             []Audit             `json:"audit"`
 	NotificationReads map[string][]string `json:"notificationReads"`
+	Accounts          map[string]Account  `json:"accounts"`
+	SuggestionSnoozed map[string]string   `json:"suggestionSnoozed"`
 }
 
 type Session struct {
@@ -211,16 +222,22 @@ type App struct {
 	sessions map[string]Session
 }
 
-var users = map[string]User{
-	"stefy":   {"stefy", "Stefy", "admin_bodega", "123456"},
-	"claudio": {"claudio", "Claudio", "gerencia", "123456"},
-	"jessica": {"jessica", "Jessica", "cocina", "123456"},
-	"caja":    {"caja", "Caja", "caja", "123456"},
+func passwordHash(v string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(v))) }
+func defaultAccounts() map[string]Account {
+	return map[string]Account{
+		"stefy":   {Username: "stefy", Name: "Stefy", Role: "admin_bodega", PasswordHash: passwordHash("123456"), Active: true},
+		"claudio": {Username: "claudio", Name: "Claudio", Role: "gerencia", PasswordHash: passwordHash("123456"), Active: true},
+		"dani":    {Username: "dani", Name: "Dani", Role: "bodega", PasswordHash: passwordHash("123456"), Active: true},
+		"jessica": {Username: "jessica", Name: "Jessica", Role: "cocina", PasswordHash: passwordHash("123456"), Active: true},
+		"caja":    {Username: "caja", Name: "Caja", Role: "caja", PasswordHash: passwordHash("123456"), Active: true},
+	}
 }
+func accountUser(a Account) User { return User{Username: a.Username, Name: a.Name, Role: a.Role} }
 
 func now() string { return time.Now().Format("2006-01-02 15:04:05") }
 func seed() Store {
 	return Store{
+		Accounts: defaultAccounts(), SuggestionSnoozed: map[string]string{},
 		Products: []Product{
 			{ID: 1, Code: "P001", Name: "Salmón Atlántico", Category: "Congelados", Unit: "Kg", Warehouse: "Congelados", Stock: 25, MinStock: 10, Cost: 11250, MainSupplierID: 1, AlternateSupplierIDs: []int{2}, Active: true},
 			{ID: 2, Code: "P002", Name: "Camarón 51/60", Category: "Congelados", Unit: "Kg", Warehouse: "Congelados", Stock: 12, MinStock: 5, Cost: 8900, MainSupplierID: 1, Active: true},
@@ -312,6 +329,19 @@ func newApp(path string) *App {
 		if a.store.NotificationReads == nil {
 			a.store.NotificationReads = map[string][]string{}
 		}
+		if a.store.Accounts == nil || len(a.store.Accounts) == 0 {
+			a.store.Accounts = defaultAccounts()
+		} else {
+			// Asegura los perfiles base sin reemplazar contraseñas ya personalizadas.
+			for k, v := range defaultAccounts() {
+				if _, ok := a.store.Accounts[k]; !ok {
+					a.store.Accounts[k] = v
+				}
+			}
+		}
+		if a.store.SuggestionSnoozed == nil {
+			a.store.SuggestionSnoozed = map[string]string{}
+		}
 		_ = a.saveLocked()
 	} else {
 		a.store = seed()
@@ -402,7 +432,15 @@ func require(a *App, roles ...string) func(http.HandlerFunc) http.HandlerFunc {
 		}
 	}
 }
-func (a *App) current(r *http.Request) User { u, _ := users[r.Header.Get("X-User")]; return u }
+func (a *App) current(r *http.Request) User {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	acc, ok := a.store.Accounts[r.Header.Get("X-User")]
+	if !ok {
+		return User{}
+	}
+	return accountUser(acc)
+}
 func (a *App) auditLocked(user, action string) {
 	a.store.Audit = append(a.store.Audit, Audit{len(a.store.Audit) + 1, user, action, now()})
 }
@@ -576,11 +614,15 @@ func main() {
 			writeJSON(w, 400, map[string]string{"error": "Datos inválidos"})
 			return
 		}
-		u, ok := users[strings.ToLower(strings.TrimSpace(in.Username))]
-		if !ok || u.Password != in.Password {
+		username := strings.ToLower(strings.TrimSpace(in.Username))
+		app.mu.RLock()
+		acc, ok := app.store.Accounts[username]
+		app.mu.RUnlock()
+		if !ok || !acc.Active || acc.PasswordHash != passwordHash(in.Password) {
 			writeJSON(w, 401, map[string]string{"error": "Usuario o contraseña incorrectos"})
 			return
 		}
+		u := accountUser(acc)
 		t := token()
 		app.mu.Lock()
 		app.sessions[t] = Session{User: u, ExpiresAt: time.Now().Add(8 * time.Hour)}
@@ -612,7 +654,10 @@ func main() {
 		writeJSON(w, 200, map[string]string{"username": u.Username, "name": u.Name, "role": u.Role})
 	}))
 	mux.HandleFunc("/api/system", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "1.0 Estabilidad 1", "lanIP": lanIP()})
+		app.mu.RLock()
+		snoozed := app.store.SuggestionSnoozed
+		app.mu.RUnlock()
+		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.2 Puesta en marcha", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
 	}))
 	mux.HandleFunc("/api/backups", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -795,7 +840,7 @@ func main() {
 			app.mu.RLock()
 			defer app.mu.RUnlock()
 			rows := append([]Product(nil), app.store.Products...)
-			if u.Role == "cocina" || u.Role == "caja" {
+			if u.Role == "cocina" || u.Role == "caja" || u.Role == "bodega" {
 				for i := range rows {
 					rows[i].Cost = 0
 					rows[i].MainSupplierID = 0
@@ -927,22 +972,25 @@ func main() {
 	mux.HandleFunc("/api/notifications", require(app)(func(w http.ResponseWriter, r *http.Request) {
 		u := app.current(r)
 		type notice struct {
-			ID   string `json:"id"`
-			Icon string `json:"icon"`
-			Text string `json:"text"`
-			Time string `json:"time"`
+			ID       string `json:"id"`
+			Icon     string `json:"icon"`
+			Text     string `json:"text"`
+			Time     string `json:"time"`
+			Type     string `json:"type"`
+			TargetID int    `json:"targetId"`
+			Priority int    `json:"priority"`
 		}
 		build := func() []notice {
 			notes := []notice{}
 			if u.Role == "admin_bodega" || u.Role == "gerencia" {
 				for _, q := range app.store.Requests {
 					if q.Status == "pendiente" {
-						notes = append(notes, notice{fmt.Sprintf("request:%d", q.ID), "📋", "Nueva solicitud de " + q.Requester, q.CreatedAt})
+						notes = append(notes, notice{fmt.Sprintf("request:%d", q.ID), "📋", "Nueva solicitud de " + q.Requester, q.CreatedAt, "request", q.ID, 20})
 					}
 				}
 				for _, p := range app.store.Products {
 					if p.Active && p.Stock <= p.MinStock {
-						notes = append(notes, notice{fmt.Sprintf("stock:%d:%.3f", p.ID, p.Stock), "⚠️", p.Name + " con stock crítico", "Ahora"})
+						notes = append(notes, notice{fmt.Sprintf("stock:%d:%.3f", p.ID, p.Stock), "⚠️", p.Name + " con stock crítico", "Ahora", "stock", p.ID, 80})
 					}
 				}
 				dayNames := map[time.Weekday]string{time.Monday: "Lunes", time.Tuesday: "Martes", time.Wednesday: "Miércoles", time.Thursday: "Jueves", time.Friday: "Viernes", time.Saturday: "Sábado", time.Sunday: "Domingo"}
@@ -958,14 +1006,14 @@ func main() {
 							if sup.OrderDeadline != "" {
 								msg += " · hasta " + sup.OrderDeadline
 							}
-							notes = append(notes, notice{fmt.Sprintf("supplier:%d:%s", sup.ID, dateKey), "🛒", msg, "Hoy"})
+							notes = append(notes, notice{fmt.Sprintf("supplier:%d:%s", sup.ID, dateKey), "🛒", msg, "Hoy", "supplier", sup.ID, 90})
 							break
 						}
 					}
 				}
 				for _, po := range app.store.Purchases {
 					if po.Status == "solicitada" || po.Status == "parcial" {
-						notes = append(notes, notice{fmt.Sprintf("purchase:%d:%s", po.ID, po.Status), "📦", po.Number + " pendiente de recepción", po.ExpectedDate})
+						notes = append(notes, notice{fmt.Sprintf("purchase:%d:%s", po.ID, po.Status), "📦", po.Number + " pendiente de recepción", po.ExpectedDate, "purchase", po.ID, 70})
 					}
 				}
 				todayDate := time.Now().Truncate(24 * time.Hour)
@@ -985,10 +1033,16 @@ func main() {
 						} else if days == 0 {
 							label = "vence hoy"
 						}
-						notes = append(notes, notice{fmt.Sprintf("expense:%d:%s", e.ID, e.DueDate), "💰", e.SupplierName + " · " + label, e.DueDate})
+						notes = append(notes, notice{fmt.Sprintf("expense:%d:%s", e.ID, e.DueDate), "💰", e.SupplierName + " · $" + fmt.Sprintf("%.0f", e.Amount) + " · " + label, e.DueDate, "expense", e.ID, 10})
 					}
 				}
 			}
+			sort.SliceStable(notes, func(i, j int) bool {
+				if notes[i].Priority == notes[j].Priority {
+					return notes[i].Time < notes[j].Time
+				}
+				return notes[i].Priority < notes[j].Priority
+			})
 			return notes
 		}
 		switch r.Method {
@@ -1049,7 +1103,7 @@ func main() {
 			app.mu.RLock()
 			rows := []Request{}
 			for _, q := range app.store.Requests {
-				if u.Role == "cocina" || u.Role == "caja" {
+				if u.Role == "cocina" || u.Role == "caja" || u.Role == "bodega" {
 					if q.Requester == u.Name {
 						rows = append(rows, q)
 					}
@@ -1207,6 +1261,79 @@ func main() {
 		http.NotFound(w, r)
 	}))
 
+	mux.HandleFunc("/api/purchase-suggestions/snooze", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.NotFound(w, r)
+			return
+		}
+		var in struct {
+			ProductIDs []int `json:"productIds"`
+		}
+		if readJSON(r, &in) != nil {
+			writeJSON(w, 400, map[string]string{"error": "Datos inválidos"})
+			return
+		}
+		app.mu.Lock()
+		defer app.mu.Unlock()
+		today := time.Now().Format("2006-01-02")
+		for _, id := range in.ProductIDs {
+			app.store.SuggestionSnoozed[strconv.Itoa(id)] = today
+		}
+		_ = app.saveLocked()
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	}))
+	mux.HandleFunc("/api/users", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			app.mu.RLock()
+			rows := []map[string]any{}
+			for _, a := range app.store.Accounts {
+				rows = append(rows, map[string]any{"username": a.Username, "name": a.Name, "role": a.Role, "active": a.Active})
+			}
+			app.mu.RUnlock()
+			sort.Slice(rows, func(i, j int) bool { return rows[i]["role"].(string) < rows[j]["role"].(string) })
+			writeJSON(w, 200, rows)
+		case "PUT":
+			var in struct {
+				Username, Name, Role, Password string
+				Active                         *bool `json:"active"`
+			}
+			if readJSON(r, &in) != nil {
+				writeJSON(w, 400, map[string]string{"error": "Datos inválidos"})
+				return
+			}
+			key := strings.ToLower(strings.TrimSpace(in.Username))
+			app.mu.Lock()
+			defer app.mu.Unlock()
+			a, ok := app.store.Accounts[key]
+			if !ok {
+				writeJSON(w, 404, map[string]string{"error": "Usuario no encontrado"})
+				return
+			}
+			if strings.TrimSpace(in.Name) != "" {
+				a.Name = strings.TrimSpace(in.Name)
+			}
+			if strings.TrimSpace(in.Role) != "" {
+				a.Role = strings.TrimSpace(in.Role)
+			}
+			if strings.TrimSpace(in.Password) != "" {
+				if len(in.Password) < 6 {
+					writeJSON(w, 400, map[string]string{"error": "La contraseña debe tener al menos 6 caracteres"})
+					return
+				}
+				a.PasswordHash = passwordHash(in.Password)
+			}
+			if in.Active != nil {
+				a.Active = *in.Active
+			}
+			app.store.Accounts[key] = a
+			app.auditLocked(r.Header.Get("X-User"), "Actualizó usuario "+key)
+			_ = app.saveLocked()
+			writeJSON(w, 200, map[string]bool{"ok": true})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
 	mux.HandleFunc("/api/purchases", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
@@ -1367,8 +1494,9 @@ func main() {
 					return
 				}
 				pending := item.Quantity - item.ReceivedQuantity
-				if row.Quantity < 0 || row.Quantity > pending+0.000001 {
-					writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Cantidad inválida para %s. Pendiente: %.2f", item.Name, pending)})
+				_ = pending // referencia informativa; una recepción real puede superar lo originalmente pedido.
+				if row.Quantity < 0 {
+					writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Cantidad inválida para %s", item.Name)})
 					return
 				}
 				if row.Quantity == 0 {
@@ -1393,12 +1521,14 @@ func main() {
 				app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Type: "entrada", Quantity: row.Quantity, Balance: p.Stock, Reason: "Recepción " + po.Number, User: u.Name, CreatedAt: now()})
 				app.store.PriceHistory = append(app.store.PriceHistory, PriceHistory{ID: len(app.store.PriceHistory) + 1, ProductID: p.ID, ProductName: p.Name, SupplierID: po.SupplierID, SupplierName: po.SupplierName, PurchaseID: po.ID, OrderNumber: po.Number, UnitPrice: row.UnitPrice, Quantity: row.Quantity, CreatedAt: now()})
 			}
-			if !anyReceived {
+			if !anyReceived && !in.CloseOrder {
 				writeJSON(w, 400, map[string]string{"error": "Debes recibir al menos un producto con cantidad mayor a cero"})
 				return
 			}
-			po.Receipts = append(po.Receipts, receipt)
-			po.ReceivedTotal += receipt.Total
+			if anyReceived {
+				po.Receipts = append(po.Receipts, receipt)
+				po.ReceivedTotal += receipt.Total
+			}
 			po.UpdatedAt = now()
 			complete := true
 			for _, it := range po.Items {
@@ -1425,19 +1555,8 @@ func main() {
 			} else {
 				po.Status = "parcial"
 			}
-			status := receipt.PaymentStatus
-			if status != "pagada" {
-				status = "pendiente"
-			}
-			issueDate := receipt.IssueDate
-			if issueDate == "" {
-				issueDate = time.Now().Format("2006-01-02")
-			}
-			exp := Expense{ID: app.nextExpenseIDLocked(), Source: "compra", Category: "Compra de mercadería", SupplierID: po.SupplierID, SupplierName: po.SupplierName, Document: receipt.Document, IssueDate: issueDate, DueDate: receipt.DueDate, Amount: receipt.Total, PaymentMethod: receipt.PaymentMethod, Status: status, PaymentDate: receipt.PaymentDate, Note: receipt.Note, PurchaseID: po.ID, ReceiptID: receipt.ID, CreatedAt: now(), CreatedBy: u.Name}
-			if exp.Status == "pagada" && exp.PaymentDate == "" {
-				exp.PaymentDate = issueDate
-			}
-			app.store.Expenses = append(app.store.Expenses, exp)
+			// Las facturas de mercadería permanecen en Compras/Proveedores; no se duplican en Gastos.
+
 			app.auditLocked(u.Name, fmt.Sprintf("Registró recepción de %s por $%.0f", po.Number, receipt.Total))
 			_ = app.saveLocked()
 			writeJSON(w, 200, po)
@@ -1588,6 +1707,25 @@ func main() {
 			writeJSON(w, 404, map[string]string{"error": "Gasto no encontrado"})
 			return
 		}
+		if r.Method == "DELETE" {
+			idx := -1
+			for i := range app.store.Expenses {
+				if app.store.Expenses[i].ID == id {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				writeJSON(w, 404, map[string]string{"error": "Gasto no encontrado"})
+				return
+			}
+			name := app.store.Expenses[idx].SupplierName
+			app.store.Expenses = append(app.store.Expenses[:idx], app.store.Expenses[idx+1:]...)
+			app.auditLocked(u.Name, "Eliminó gasto "+name)
+			_ = app.saveLocked()
+			writeJSON(w, 200, map[string]bool{"ok": true})
+			return
+		}
 		if r.Method == "PUT" {
 			var in Expense
 			if readJSON(r, &in) != nil {
@@ -1649,6 +1787,53 @@ func main() {
 			rows = append(rows, MovementView{m.ID, m.ProductID, name, warehouse, m.Type, m.Quantity, m.Balance, m.Reason, m.User, m.CreatedAt})
 		}
 		writeJSON(w, 200, rows)
+	}))
+	mux.HandleFunc("/api/inventory/physical", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.NotFound(w, r)
+			return
+		}
+		var in struct {
+			Warehouse string `json:"warehouse"`
+			Note      string `json:"note"`
+			Items     []struct {
+				ProductID int     `json:"productId"`
+				NewStock  float64 `json:"newStock"`
+			} `json:"items"`
+		}
+		if readJSON(r, &in) != nil || strings.TrimSpace(in.Warehouse) == "" || len(in.Items) == 0 {
+			writeJSON(w, 400, map[string]string{"error": "Inventario físico incompleto"})
+			return
+		}
+		u := app.current(r)
+		app.mu.Lock()
+		defer app.mu.Unlock()
+		changed := 0
+		for _, row := range in.Items {
+			if row.NewStock < 0 {
+				writeJSON(w, 400, map[string]string{"error": "El stock contado no puede ser negativo"})
+				return
+			}
+			p := app.productLocked(row.ProductID)
+			if p == nil || p.Warehouse != in.Warehouse {
+				continue
+			}
+			diff := row.NewStock - p.Stock
+			if diff == 0 {
+				continue
+			}
+			p.Stock = row.NewStock
+			app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Type: "ajuste", Quantity: diff, Balance: p.Stock, Reason: "Inventario físico · " + in.Warehouse + func() string {
+				if strings.TrimSpace(in.Note) != "" {
+					return " · " + strings.TrimSpace(in.Note)
+				}
+				return ""
+			}(), User: u.Name, CreatedAt: now()})
+			changed++
+		}
+		app.auditLocked(u.Name, fmt.Sprintf("Confirmó inventario físico de %s (%d ajustes)", in.Warehouse, changed))
+		_ = app.saveLocked()
+		writeJSON(w, 200, map[string]any{"ok": true, "changed": changed})
 	}))
 	mux.HandleFunc("/api/inventory/adjust", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {

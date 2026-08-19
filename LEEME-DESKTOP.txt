@@ -1,4 +1,4 @@
-EB Gestión 0.9.2 · Puesta en marcha
+EB Gestión 0.9.3 · Corrección recepción
 
 Esta versión incorpora las correcciones necesarias para iniciar el uso operativo:
 - recepción de compras con diferencias y cantidades reales;

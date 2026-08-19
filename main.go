@@ -657,7 +657,7 @@ func main() {
 		app.mu.RLock()
 		snoozed := app.store.SuggestionSnoozed
 		app.mu.RUnlock()
-		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.2 Puesta en marcha", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
+		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.3 Corrección recepción", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
 	}))
 	mux.HandleFunc("/api/backups", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -1479,9 +1479,47 @@ func main() {
 				writeJSON(w, 400, map[string]string{"error": "Ingresa las cantidades recibidas"})
 				return
 			}
-			receipt := PurchaseReceipt{ID: len(po.Receipts) + 1, ReceivedAt: now(), ReceivedBy: u.Name, Document: strings.TrimSpace(in.Document), IssueDate: strings.TrimSpace(in.IssueDate), DueDate: strings.TrimSpace(in.DueDate), PaymentMethod: strings.TrimSpace(in.PaymentMethod), PaymentStatus: strings.TrimSpace(in.PaymentStatus), PaymentDate: strings.TrimSpace(in.PaymentDate), Note: strings.TrimSpace(in.Note), Items: []PurchaseReceiptItem{}}
+			if in.CloseOrder && strings.TrimSpace(in.CloseReason) == "" {
+				writeJSON(w, 400, map[string]string{"error": "Indica el motivo para cerrar la orden con diferencias"})
+				return
+			}
+
+			// La recepción se procesa como una transacción: primero se valida todo,
+			// luego se aplican los cambios y solo al final se guarda. Si ocurre un
+			// error inesperado, se restaura el estado anterior para evitar stocks parciales.
+			before, snapshotErr := json.Marshal(app.store)
+			if snapshotErr != nil {
+				writeJSON(w, 500, map[string]string{"error": "No se pudo preparar la recepción. Intenta nuevamente."})
+				return
+			}
+			committed := false
+			defer func() {
+				if rec := recover(); rec != nil {
+					if !committed {
+						_ = json.Unmarshal(before, &app.store)
+					}
+					writeJSON(w, 500, map[string]string{"error": fmt.Sprintf("La recepción no se guardó por un error interno: %v", rec)})
+				}
+			}()
+
+			type validatedReceiptRow struct {
+				Item      *PurchaseItem
+				Product   *Product
+				Quantity  float64
+				UnitPrice float64
+				Note      string
+			}
+			validated := make([]validatedReceiptRow, 0, len(in.Items))
 			anyReceived := false
 			for _, row := range in.Items {
+				if row.Quantity < 0 {
+					writeJSON(w, 400, map[string]string{"error": "La cantidad recibida no puede ser negativa"})
+					return
+				}
+				if row.UnitPrice < 0 {
+					writeJSON(w, 400, map[string]string{"error": "El precio no puede ser negativo"})
+					return
+				}
 				var item *PurchaseItem
 				for i := range po.Items {
 					if po.Items[i].ProductID == row.ProductID {
@@ -1493,37 +1531,36 @@ func main() {
 					writeJSON(w, 400, map[string]string{"error": "Producto no pertenece a la orden"})
 					return
 				}
-				pending := item.Quantity - item.ReceivedQuantity
-				_ = pending // referencia informativa; una recepción real puede superar lo originalmente pedido.
-				if row.Quantity < 0 {
-					writeJSON(w, 400, map[string]string{"error": fmt.Sprintf("Cantidad inválida para %s", item.Name)})
+				p := app.productLocked(item.ProductID)
+				if p == nil {
+					writeJSON(w, 400, map[string]string{"error": "Producto no encontrado: " + item.Name})
 					return
 				}
+				if row.Quantity > 0 {
+					anyReceived = true
+				}
+				validated = append(validated, validatedReceiptRow{Item: item, Product: p, Quantity: row.Quantity, UnitPrice: row.UnitPrice, Note: strings.TrimSpace(row.Note)})
+			}
+			if !anyReceived && !in.CloseOrder {
+				writeJSON(w, 400, map[string]string{"error": "Debes recibir al menos un producto con cantidad mayor a cero"})
+				return
+			}
+
+			receipt := PurchaseReceipt{ID: len(po.Receipts) + 1, ReceivedAt: now(), ReceivedBy: u.Name, Document: strings.TrimSpace(in.Document), IssueDate: strings.TrimSpace(in.IssueDate), DueDate: strings.TrimSpace(in.DueDate), PaymentMethod: strings.TrimSpace(in.PaymentMethod), PaymentStatus: strings.TrimSpace(in.PaymentStatus), PaymentDate: strings.TrimSpace(in.PaymentDate), Note: strings.TrimSpace(in.Note), Items: []PurchaseReceiptItem{}}
+			for _, row := range validated {
 				if row.Quantity == 0 {
 					continue
 				}
-				if row.UnitPrice < 0 {
-					writeJSON(w, 400, map[string]string{"error": "El precio no puede ser negativo"})
-					return
-				}
-				p := app.productLocked(item.ProductID)
-				if p == nil {
-					writeJSON(w, 400, map[string]string{"error": "Producto no encontrado"})
-					return
-				}
-				anyReceived = true
+				p := row.Product
+				item := row.Item
 				p.Stock += row.Quantity
 				p.Cost = row.UnitPrice
 				item.ReceivedQuantity += row.Quantity
 				item.LastReceivedPrice = row.UnitPrice
 				receipt.Total += row.Quantity * row.UnitPrice
-				receipt.Items = append(receipt.Items, PurchaseReceiptItem{ProductID: p.ID, Name: p.Name, Quantity: row.Quantity, Unit: p.Unit, UnitPrice: row.UnitPrice, Warehouse: p.Warehouse, Note: strings.TrimSpace(row.Note)})
+				receipt.Items = append(receipt.Items, PurchaseReceiptItem{ProductID: p.ID, Name: p.Name, Quantity: row.Quantity, Unit: p.Unit, UnitPrice: row.UnitPrice, Warehouse: p.Warehouse, Note: row.Note})
 				app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Type: "entrada", Quantity: row.Quantity, Balance: p.Stock, Reason: "Recepción " + po.Number, User: u.Name, CreatedAt: now()})
 				app.store.PriceHistory = append(app.store.PriceHistory, PriceHistory{ID: len(app.store.PriceHistory) + 1, ProductID: p.ID, ProductName: p.Name, SupplierID: po.SupplierID, SupplierName: po.SupplierName, PurchaseID: po.ID, OrderNumber: po.Number, UnitPrice: row.UnitPrice, Quantity: row.Quantity, CreatedAt: now()})
-			}
-			if !anyReceived && !in.CloseOrder {
-				writeJSON(w, 400, map[string]string{"error": "Debes recibir al menos un producto con cantidad mayor a cero"})
-				return
 			}
 			if anyReceived {
 				po.Receipts = append(po.Receipts, receipt)
@@ -1537,28 +1574,37 @@ func main() {
 					break
 				}
 			}
-			if complete {
+			if in.CloseOrder {
+				// Si el usuario decide cerrar, respetamos la decisión aunque haya productos
+				// sin recibir. Si todo llegó (o llegó más), queda simplemente como recibida.
+				if complete {
+					po.Status = "recibida"
+				} else {
+					po.Status = "cerrada_diferencias"
+					po.ClosedWithDifferences = true
+				}
+				po.ClosedAt = now()
+				po.ClosedBy = u.Name
+				po.CloseReason = strings.TrimSpace(in.CloseReason)
+			} else if complete {
 				po.Status = "recibida"
+			} else {
+				po.Status = "parcial"
+			}
+			if po.Status == "recibida" || po.Status == "cerrada_diferencias" {
 				if sup := app.supplierLocked(po.SupplierID); sup != nil {
 					sup.LastPurchase = now()
 					sup.LastDispatch = now()
 				}
-			} else if in.CloseOrder {
-				po.Status = "cerrada_diferencias"
-				po.ClosedAt = now()
-				po.ClosedBy = u.Name
-				po.CloseReason = strings.TrimSpace(in.CloseReason)
-				if po.CloseReason == "" {
-					po.CloseReason = "Orden cerrada con cantidades no recibidas"
-				}
-				po.ClosedWithDifferences = true
-			} else {
-				po.Status = "parcial"
 			}
 			// Las facturas de mercadería permanecen en Compras/Proveedores; no se duplican en Gastos.
-
 			app.auditLocked(u.Name, fmt.Sprintf("Registró recepción de %s por $%.0f", po.Number, receipt.Total))
-			_ = app.saveLocked()
+			if err := app.saveLocked(); err != nil {
+				_ = json.Unmarshal(before, &app.store)
+				writeJSON(w, 500, map[string]string{"error": "No se pudo guardar la recepción. No se modificó el inventario: " + err.Error()})
+				return
+			}
+			committed = true
 			writeJSON(w, 200, po)
 			return
 		}

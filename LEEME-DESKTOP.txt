@@ -1,12 +1,15 @@
-EB Gestión 0.9.3 · Corrección recepción
+EB Gestión 0.9.4 · Traspasos y estabilidad
 
-Esta versión incorpora las correcciones necesarias para iniciar el uso operativo:
-- recepción de compras con diferencias y cantidades reales;
-- compras sugeridas revisables y opción “no comprar hoy”;
-- notificaciones priorizadas y navegables;
-- inventario físico general por bodega;
-- gastos con eliminación controlada;
-- perfiles Gerencia, Administración, Bodega, Cocina y Caja;
-- contraseñas individuales administrables.
+Cambios principales:
+- solicitudes entregadas como traspasos internos entre bodegas;
+- destino automático Cocina y Barra y Caja, con selección para Administración/Bodega/Gerencia;
+- stock por ubicación y visualización de Barra y Caja en Inventario;
+- Kardex registra salida de origen y entrada a destino;
+- mejoras de estabilidad/refresco para evitar mensajes engañosos después de operaciones guardadas;
+- cierre de sesión inmediato aun si el servidor interno demora;
+- guardado de usuarios/contraseñas con confirmación y control de errores;
+- notificaciones “Marcar leídas” más robustas;
+- respaldo automático optimizado para evitar acumulación excesiva de archivos.
 
-Antes de instalar una nueva versión, cree un respaldo desde EB Gestión.
+Las recepciones de compras 0.9.3 se mantienen sin cambios funcionales.
+Antes de instalar, cree un respaldo desde EB Gestión.

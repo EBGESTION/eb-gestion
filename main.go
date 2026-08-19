@@ -37,19 +37,20 @@ type Account struct {
 	Active       bool   `json:"active"`
 }
 type Product struct {
-	ID                   int     `json:"id"`
-	Code                 string  `json:"code"`
-	Name                 string  `json:"name"`
-	Category             string  `json:"category"`
-	Unit                 string  `json:"unit"`
-	Warehouse            string  `json:"warehouse"`
-	Stock                float64 `json:"stock"`
-	MinStock             float64 `json:"minStock"`
-	Cost                 float64 `json:"cost"`
-	MainSupplierID       int     `json:"mainSupplierId"`
-	AlternateSupplierIDs []int   `json:"alternateSupplierIds"`
-	Notes                string  `json:"notes"`
-	Active               bool    `json:"active"`
+	ID                   int                `json:"id"`
+	Code                 string             `json:"code"`
+	Name                 string             `json:"name"`
+	Category             string             `json:"category"`
+	Unit                 string             `json:"unit"`
+	Warehouse            string             `json:"warehouse"`
+	Stock                float64            `json:"stock"`
+	WarehouseStocks      map[string]float64 `json:"warehouseStocks,omitempty"`
+	MinStock             float64            `json:"minStock"`
+	Cost                 float64            `json:"cost"`
+	MainSupplierID       int                `json:"mainSupplierId"`
+	AlternateSupplierIDs []int              `json:"alternateSupplierIds"`
+	Notes                string             `json:"notes"`
+	Active               bool               `json:"active"`
 }
 type Supplier struct {
 	ID            int      `json:"id"`
@@ -170,19 +171,21 @@ type RequestItem struct {
 	DeliveredQty *float64 `json:"deliveredQty"`
 }
 type Request struct {
-	ID          int           `json:"id"`
-	Requester   string        `json:"requester"`
-	Area        string        `json:"area"`
-	Status      string        `json:"status"`
-	CreatedAt   string        `json:"createdAt"`
-	UpdatedAt   string        `json:"updatedAt"`
-	DeliveredBy string        `json:"deliveredBy"`
-	Note        string        `json:"note"`
-	Items       []RequestItem `json:"items"`
+	ID                   int           `json:"id"`
+	Requester            string        `json:"requester"`
+	Area                 string        `json:"area"`
+	Status               string        `json:"status"`
+	CreatedAt            string        `json:"createdAt"`
+	UpdatedAt            string        `json:"updatedAt"`
+	DeliveredBy          string        `json:"deliveredBy"`
+	DestinationWarehouse string        `json:"destinationWarehouse"`
+	Note                 string        `json:"note"`
+	Items                []RequestItem `json:"items"`
 }
 type Movement struct {
 	ID        int     `json:"id"`
 	ProductID int     `json:"productId"`
+	Warehouse string  `json:"warehouse"`
 	Type      string  `json:"type"`
 	Quantity  float64 `json:"quantity"`
 	Balance   float64 `json:"balance"`
@@ -285,6 +288,7 @@ func newApp(path string) *App {
 			if a.store.Products[i].AlternateSupplierIDs == nil {
 				a.store.Products[i].AlternateSupplierIDs = []int{}
 			}
+			ensureWarehouseStocks(&a.store.Products[i])
 		}
 		if a.store.Purchases == nil {
 			a.store.Purchases = []PurchaseOrder{}
@@ -342,6 +346,15 @@ func newApp(path string) *App {
 		if a.store.SuggestionSnoozed == nil {
 			a.store.SuggestionSnoozed = map[string]string{}
 		}
+		for i := range a.store.Movements {
+			if strings.TrimSpace(a.store.Movements[i].Warehouse) == "" {
+				if p := a.productLocked(a.store.Movements[i].ProductID); p != nil {
+					a.store.Movements[i].Warehouse = p.Warehouse
+				}
+			} else {
+				a.store.Movements[i].Warehouse = normalizeWarehouse(a.store.Movements[i].Warehouse)
+			}
+		}
 		_ = a.saveLocked()
 	} else {
 		a.store = seed()
@@ -357,10 +370,6 @@ func (a *App) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(a.path), 0755); err != nil {
 		return err
 	}
-	tmp := a.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0644); err != nil {
-		return err
-	}
 	if old, err := os.ReadFile(a.path); err == nil {
 		if err := os.WriteFile(a.path+".bak", old, 0644); err != nil {
 			return err
@@ -373,8 +382,22 @@ func (a *App) saveLocked() error {
 		if err := os.WriteFile(filepath.Join(backupDir, name), old, 0644); err != nil {
 			return err
 		}
+		// Mantiene los respaldos automáticos recientes para evitar que miles de archivos ralenticen Windows.
+		entries, _ := os.ReadDir(backupDir)
+		auto := []os.DirEntry{}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasPrefix(e.Name(), "data-") {
+				auto = append(auto, e)
+			}
+		}
+		if len(auto) > 120 {
+			sort.Slice(auto, func(i, j int) bool { return auto[i].Name() < auto[j].Name() })
+			for _, e := range auto[:len(auto)-120] {
+				_ = os.Remove(filepath.Join(backupDir, e.Name()))
+			}
+		}
 	}
-	return os.Rename(tmp, a.path)
+	return os.WriteFile(a.path, b, 0644)
 }
 func token() string { b := make([]byte, 24); _, _ = rand.Read(b); return hex.EncodeToString(b) }
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -451,6 +474,74 @@ func (a *App) productLocked(id int) *Product {
 		}
 	}
 	return nil
+}
+
+var warehouseNames = []string{"Congelados", "Abarrotes y Aseo", "Líquidos", "Envases", "Cocina", "Barra y Caja", "Mantención"}
+
+func normalizeWarehouse(v string) string {
+	v = strings.TrimSpace(v)
+	switch strings.ToLower(v) {
+	case "abarrotes", "abarrotes y líquidos", "abarrotes y liquidos":
+		return "Abarrotes y Aseo"
+	case "barra", "barra/caja", "caja", "barra y caja":
+		return "Barra y Caja"
+	}
+	return v
+}
+
+func ensureWarehouseStocks(p *Product) {
+	if p.WarehouseStocks == nil {
+		p.WarehouseStocks = map[string]float64{}
+	}
+	p.Warehouse = normalizeWarehouse(p.Warehouse)
+	if _, ok := p.WarehouseStocks[p.Warehouse]; !ok {
+		p.WarehouseStocks[p.Warehouse] = p.Stock
+	} else {
+		p.Stock = p.WarehouseStocks[p.Warehouse]
+	}
+}
+
+func stockAt(p *Product, warehouse string) float64 {
+	ensureWarehouseStocks(p)
+	warehouse = normalizeWarehouse(warehouse)
+	return p.WarehouseStocks[warehouse]
+}
+
+func setStockAt(p *Product, warehouse string, value float64) {
+	ensureWarehouseStocks(p)
+	warehouse = normalizeWarehouse(warehouse)
+	if value < 0 {
+		value = 0
+	}
+	p.WarehouseStocks[warehouse] = value
+	if warehouse == p.Warehouse {
+		p.Stock = value
+	}
+}
+
+func addStockAt(p *Product, warehouse string, delta float64) float64 {
+	value := stockAt(p, warehouse) + delta
+	setStockAt(p, warehouse, value)
+	return stockAt(p, warehouse)
+}
+
+func totalStock(p *Product) float64 {
+	ensureWarehouseStocks(p)
+	total := 0.0
+	for _, v := range p.WarehouseStocks {
+		total += v
+	}
+	return total
+}
+
+func requestDestination(area string) string {
+	switch strings.ToLower(strings.TrimSpace(area)) {
+	case "cocina":
+		return "Cocina"
+	case "caja", "barra", "barra y caja":
+		return "Barra y Caja"
+	}
+	return ""
 }
 
 func (a *App) purchaseLocked(id int) *PurchaseOrder {
@@ -883,6 +974,8 @@ func main() {
 			}
 			in.ID = maxID + 1
 			in.Active = true
+			in.Warehouse = normalizeWarehouse(in.Warehouse)
+			in.WarehouseStocks = map[string]float64{in.Warehouse: in.Stock}
 			app.store.Products = append(app.store.Products, in)
 			app.auditLocked(u.Name, "Creó producto "+in.Name)
 			_ = app.saveLocked()
@@ -933,7 +1026,13 @@ func main() {
 			in.ID = id
 			in.Active = p.Active
 			if app.productHasHistoryLocked(id) {
+				// Con historial, la ubicación principal y los stocks se modifican por movimientos, no editando la ficha.
+				in.Warehouse = p.Warehouse
 				in.Stock = p.Stock
+				in.WarehouseStocks = p.WarehouseStocks
+			} else {
+				in.Warehouse = normalizeWarehouse(in.Warehouse)
+				in.WarehouseStocks = map[string]float64{in.Warehouse: in.Stock}
 			}
 			*p = in
 			app.auditLocked(u.Name, "Editó producto "+in.Name)
@@ -950,7 +1049,7 @@ func main() {
 		critical := 0
 		for _, p := range app.store.Products {
 			if p.Active {
-				value += p.Stock * p.Cost
+				value += totalStock(&p) * p.Cost
 				if p.Stock <= p.MinStock {
 					critical++
 				}
@@ -1090,7 +1189,10 @@ func main() {
 				merged = merged[len(merged)-500:]
 			}
 			app.store.NotificationReads[u.Username] = merged
-			_ = app.saveLocked()
+			if err := app.saveLocked(); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "No fue posible guardar las notificaciones: " + err.Error()})
+				return
+			}
 			writeJSON(w, 200, map[string]bool{"ok": true})
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -1114,7 +1216,7 @@ func main() {
 			for i := range rows {
 				for j := range rows[i].Items {
 					if p := app.productLocked(rows[i].Items[j].ProductID); p != nil {
-						rows[i].Items[j].Stock = p.Stock
+						rows[i].Items[j].Stock = stockAt(p, p.Warehouse)
 					}
 				}
 			}
@@ -1147,17 +1249,25 @@ func main() {
 				return
 			}
 			area := "Bodega"
-			if u.Role == "cocina" {
+			switch u.Role {
+			case "cocina":
 				area = "Cocina"
-			}
-			if u.Role == "caja" {
+			case "caja":
 				area = "Caja"
+			case "admin_bodega":
+				area = "Administración"
+			case "gerencia":
+				area = "Gerencia"
 			}
-			q := Request{id, u.Name, area, "pendiente", now(), now(), "", in.Note, items}
+			q := Request{ID: id, Requester: u.Name, Area: area, Status: "pendiente", CreatedAt: now(), UpdatedAt: now(), Note: in.Note, Items: items}
 			app.store.Requests = append(app.store.Requests, q)
 			app.auditLocked(u.Name, fmt.Sprintf("Creó solicitud #%d", id))
-			_ = app.saveLocked()
+			err := app.saveLocked()
 			app.mu.Unlock()
+			if err != nil {
+				writeJSON(w, 500, map[string]string{"error": "No fue posible guardar la solicitud: " + err.Error()})
+				return
+			}
 			writeJSON(w, 201, map[string]any{"ok": true, "id": id})
 		default:
 			http.NotFound(w, r)
@@ -1194,8 +1304,13 @@ func main() {
 			return
 		}
 		if action == "deliver" && r.Method == "POST" {
+			if q.Status != "pendiente" && q.Status != "preparando" {
+				writeJSON(w, 200, map[string]any{"ok": true, "status": q.Status, "alreadyProcessed": true})
+				return
+			}
 			var in struct {
-				Items []struct {
+				DestinationWarehouse string `json:"destinationWarehouse"`
+				Items                []struct {
 					ItemID       int     `json:"itemId"`
 					DeliveredQty float64 `json:"deliveredQty"`
 					Reason       string  `json:"reason"`
@@ -1205,8 +1320,32 @@ func main() {
 				writeJSON(w, 400, map[string]string{"error": "Datos inválidos"})
 				return
 			}
-			anyDelivered := false
+			destination := requestDestination(q.Area)
+			if destination == "" {
+				destination = normalizeWarehouse(in.DestinationWarehouse)
+			}
+			anyRequestedDelivery := false
+			for _, x := range in.Items {
+				if x.DeliveredQty > 0 {
+					anyRequestedDelivery = true
+					break
+				}
+			}
+			if anyRequestedDelivery && strings.TrimSpace(destination) == "" {
+				writeJSON(w, 400, map[string]string{"error": "Selecciona la bodega destino"})
+				return
+			}
+
+			// Primero valida todo; recién después modifica inventario, para evitar movimientos parciales.
+			type deliveryPlan struct {
+				item           *RequestItem
+				product        *Product
+				qty            float64
+				reason, source string
+			}
+			plans := []deliveryPlan{}
 			complete := true
+			anyDelivered := false
 			for _, x := range in.Items {
 				var item *RequestItem
 				for j := range q.Items {
@@ -1222,27 +1361,45 @@ func main() {
 				if p == nil {
 					continue
 				}
+				source := p.Warehouse
+				available := stockAt(p, source)
 				qty := x.DeliveredQty
 				if qty < 0 {
 					qty = 0
 				}
-				if qty > p.Stock {
-					qty = p.Stock
+				if qty > available {
+					qty = available
 				}
 				if qty < item.RequestedQty && strings.TrimSpace(x.Reason) == "" {
 					writeJSON(w, 400, map[string]string{"error": "Indica el motivo cuando entregas menos"})
 					return
 				}
-				item.DeliveredQty = &qty
-				item.Reason = x.Reason
+				if qty > 0 && normalizeWarehouse(destination) == normalizeWarehouse(source) {
+					writeJSON(w, 400, map[string]string{"error": "La bodega destino debe ser distinta de la bodega origen (" + source + ")"})
+					return
+				}
+				plans = append(plans, deliveryPlan{item: item, product: p, qty: qty, reason: x.Reason, source: source})
 				if qty > 0 {
 					anyDelivered = true
-					p.Stock -= qty
-					app.store.Movements = append(app.store.Movements, Movement{len(app.store.Movements) + 1, p.ID, "salida", -qty, p.Stock, fmt.Sprintf("Solicitud #%d", id), u.Name, now()})
 				}
 				if qty < item.RequestedQty {
 					complete = false
 				}
+			}
+			for _, plan := range plans {
+				qty := plan.qty
+				item := plan.item
+				p := plan.product
+				item.DeliveredQty = &qty
+				item.Reason = plan.reason
+				if qty <= 0 {
+					continue
+				}
+				sourceBalance := addStockAt(p, plan.source, -qty)
+				destBalance := addStockAt(p, destination, qty)
+				reason := fmt.Sprintf("Traspaso Solicitud #%d", id)
+				app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Warehouse: plan.source, Type: "salida", Quantity: -qty, Balance: sourceBalance, Reason: reason + " → " + destination, User: u.Name, CreatedAt: now()})
+				app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Warehouse: destination, Type: "entrada", Quantity: qty, Balance: destBalance, Reason: reason + " ← " + plan.source, User: u.Name, CreatedAt: now()})
 			}
 			if complete {
 				q.Status = "entregada"
@@ -1252,12 +1409,17 @@ func main() {
 				q.Status = "no_entregada"
 			}
 			q.DeliveredBy = u.Name
+			q.DestinationWarehouse = destination
 			q.UpdatedAt = now()
-			app.auditLocked(u.Name, fmt.Sprintf("Finalizó solicitud #%d (%s)", id, q.Status))
-			_ = app.saveLocked()
-			writeJSON(w, 200, map[string]any{"ok": true, "status": q.Status})
+			app.auditLocked(u.Name, fmt.Sprintf("Finalizó solicitud #%d (%s) destino %s", id, q.Status, destination))
+			if err := app.saveLocked(); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "No fue posible guardar la entrega: " + err.Error()})
+				return
+			}
+			writeJSON(w, 200, map[string]any{"ok": true, "status": q.Status, "destinationWarehouse": destination})
 			return
 		}
+
 		http.NotFound(w, r)
 	}))
 
@@ -1328,7 +1490,10 @@ func main() {
 			}
 			app.store.Accounts[key] = a
 			app.auditLocked(r.Header.Get("X-User"), "Actualizó usuario "+key)
-			_ = app.saveLocked()
+			if err := app.saveLocked(); err != nil {
+				writeJSON(w, 500, map[string]string{"error": "No fue posible guardar el usuario: " + err.Error()})
+				return
+			}
 			writeJSON(w, 200, map[string]bool{"ok": true})
 		default:
 			http.NotFound(w, r)
@@ -1553,13 +1718,13 @@ func main() {
 				}
 				p := row.Product
 				item := row.Item
-				p.Stock += row.Quantity
+				balance := addStockAt(p, p.Warehouse, row.Quantity)
 				p.Cost = row.UnitPrice
 				item.ReceivedQuantity += row.Quantity
 				item.LastReceivedPrice = row.UnitPrice
 				receipt.Total += row.Quantity * row.UnitPrice
 				receipt.Items = append(receipt.Items, PurchaseReceiptItem{ProductID: p.ID, Name: p.Name, Quantity: row.Quantity, Unit: p.Unit, UnitPrice: row.UnitPrice, Warehouse: p.Warehouse, Note: row.Note})
-				app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Type: "entrada", Quantity: row.Quantity, Balance: p.Stock, Reason: "Recepción " + po.Number, User: u.Name, CreatedAt: now()})
+				app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Warehouse: p.Warehouse, Type: "entrada", Quantity: row.Quantity, Balance: balance, Reason: "Recepción " + po.Number, User: u.Name, CreatedAt: now()})
 				app.store.PriceHistory = append(app.store.PriceHistory, PriceHistory{ID: len(app.store.PriceHistory) + 1, ProductID: p.ID, ProductName: p.Name, SupplierID: po.SupplierID, SupplierName: po.SupplierName, PurchaseID: po.ID, OrderNumber: po.Number, UnitPrice: row.UnitPrice, Quantity: row.Quantity, CreatedAt: now()})
 			}
 			if anyReceived {
@@ -1823,10 +1988,13 @@ func main() {
 		rows := []MovementView{}
 		for i := len(app.store.Movements) - 1; i >= 0; i-- {
 			m := app.store.Movements[i]
-			name, warehouse := "Producto", ""
+			name, warehouse := "Producto", normalizeWarehouse(m.Warehouse)
 			for _, p := range app.store.Products {
 				if p.ID == m.ProductID {
-					name, warehouse = p.Name, p.Warehouse
+					name = p.Name
+					if warehouse == "" {
+						warehouse = p.Warehouse
+					}
 					break
 				}
 			}
@@ -1861,15 +2029,16 @@ func main() {
 				return
 			}
 			p := app.productLocked(row.ProductID)
-			if p == nil || p.Warehouse != in.Warehouse {
+			if p == nil {
 				continue
 			}
-			diff := row.NewStock - p.Stock
+			oldStock := stockAt(p, in.Warehouse)
+			diff := row.NewStock - oldStock
 			if diff == 0 {
 				continue
 			}
-			p.Stock = row.NewStock
-			app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Type: "ajuste", Quantity: diff, Balance: p.Stock, Reason: "Inventario físico · " + in.Warehouse + func() string {
+			setStockAt(p, in.Warehouse, row.NewStock)
+			app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Warehouse: in.Warehouse, Type: "ajuste", Quantity: diff, Balance: row.NewStock, Reason: "Inventario físico · " + in.Warehouse + func() string {
 				if strings.TrimSpace(in.Note) != "" {
 					return " · " + strings.TrimSpace(in.Note)
 				}
@@ -1878,7 +2047,10 @@ func main() {
 			changed++
 		}
 		app.auditLocked(u.Name, fmt.Sprintf("Confirmó inventario físico de %s (%d ajustes)", in.Warehouse, changed))
-		_ = app.saveLocked()
+		if err := app.saveLocked(); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "No fue posible guardar el inventario físico: " + err.Error()})
+			return
+		}
 		writeJSON(w, 200, map[string]any{"ok": true, "changed": changed})
 	}))
 	mux.HandleFunc("/api/inventory/adjust", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
@@ -1888,6 +2060,7 @@ func main() {
 		}
 		var in struct {
 			ProductID int     `json:"productId"`
+			Warehouse string  `json:"warehouse"`
 			NewStock  float64 `json:"newStock"`
 			Reason    string  `json:"reason"`
 			Note      string  `json:"note"`
@@ -1904,20 +2077,29 @@ func main() {
 			writeJSON(w, 404, map[string]string{"error": "Producto no encontrado"})
 			return
 		}
-		diff := in.NewStock - p.Stock
+		warehouse := normalizeWarehouse(in.Warehouse)
+		if warehouse == "" {
+			warehouse = p.Warehouse
+		}
+		oldStock := stockAt(p, warehouse)
+		diff := in.NewStock - oldStock
 		if diff == 0 {
 			writeJSON(w, 400, map[string]string{"error": "El nuevo stock es igual al actual"})
 			return
 		}
-		p.Stock = in.NewStock
-		detail := in.Reason
+		setStockAt(p, warehouse, in.NewStock)
+		detail := in.Reason + " · " + warehouse
 		if strings.TrimSpace(in.Note) != "" {
 			detail += ": " + strings.TrimSpace(in.Note)
 		}
-		app.store.Movements = append(app.store.Movements, Movement{len(app.store.Movements) + 1, p.ID, "ajuste", diff, p.Stock, detail, u.Name, now()})
-		app.auditLocked(u.Name, fmt.Sprintf("Ajustó stock de %s: %+g (saldo %.2f)", p.Name, diff, p.Stock))
-		_ = app.saveLocked()
-		writeJSON(w, 200, map[string]any{"ok": true, "difference": diff, "balance": p.Stock})
+		balance := stockAt(p, warehouse)
+		app.store.Movements = append(app.store.Movements, Movement{ID: len(app.store.Movements) + 1, ProductID: p.ID, Warehouse: warehouse, Type: "ajuste", Quantity: diff, Balance: balance, Reason: detail, User: u.Name, CreatedAt: now()})
+		app.auditLocked(u.Name, fmt.Sprintf("Ajustó stock de %s en %s: %+g (saldo %.2f)", p.Name, warehouse, diff, balance))
+		if err := app.saveLocked(); err != nil {
+			writeJSON(w, 500, map[string]string{"error": "No fue posible guardar el ajuste: " + err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true, "difference": diff, "balance": balance})
 	}))
 
 	sub, _ := fs.Sub(embedded, "web")

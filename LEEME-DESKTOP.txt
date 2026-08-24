@@ -1,15 +1,4 @@
-EB Gestión 0.9.4 · Traspasos y estabilidad
+EB Gestión 0.9.5 · Estabilidad de sesión
 
-Cambios principales:
-- solicitudes entregadas como traspasos internos entre bodegas;
-- destino automático Cocina y Barra y Caja, con selección para Administración/Bodega/Gerencia;
-- stock por ubicación y visualización de Barra y Caja en Inventario;
-- Kardex registra salida de origen y entrada a destino;
-- mejoras de estabilidad/refresco para evitar mensajes engañosos después de operaciones guardadas;
-- cierre de sesión inmediato aun si el servidor interno demora;
-- guardado de usuarios/contraseñas con confirmación y control de errores;
-- notificaciones “Marcar leídas” más robustas;
-- respaldo automático optimizado para evitar acumulación excesiva de archivos.
-
-Las recepciones de compras 0.9.3 se mantienen sin cambios funcionales.
-Antes de instalar, cree un respaldo desde EB Gestión.
+Corrección enfocada en evitar bloqueos y timeouts durante sesiones largas.
+Mantiene las funciones y traspasos de la 0.9.4.

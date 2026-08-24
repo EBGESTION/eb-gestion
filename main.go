@@ -399,6 +399,20 @@ func (a *App) saveLocked() error {
 	}
 	return os.WriteFile(a.path, b, 0644)
 }
+func (a *App) saveFastLocked() error {
+	b, err := json.MarshalIndent(a.store, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(a.path), 0755); err != nil {
+		return err
+	}
+	tmp := a.path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, a.path)
+}
 func token() string { b := make([]byte, 24); _, _ = rand.Read(b); return hex.EncodeToString(b) }
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -415,19 +429,14 @@ func (a *App) auth(r *http.Request) (User, bool) {
 	if t == "" {
 		return User{}, false
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mu.RLock()
 	s, ok := a.sessions[t]
-	if !ok {
+	a.mu.RUnlock()
+	if !ok || time.Now().After(s.ExpiresAt) {
 		return User{}, false
 	}
-	if time.Now().After(s.ExpiresAt) {
-		delete(a.sessions, t)
-		return User{}, false
-	}
-	// Sesión deslizante: renueva actividad por 8 horas.
-	s.ExpiresAt = time.Now().Add(8 * time.Hour)
-	a.sessions[t] = s
+	// La sesión dura 8 horas. No se escribe el mapa en cada petición: evita
+	// serializar/bloquear todas las llamadas de refresco de la interfaz.
 	return s.User, true
 }
 func require(a *App, roles ...string) func(http.HandlerFunc) http.HandlerFunc {
@@ -718,7 +727,7 @@ func main() {
 		app.mu.Lock()
 		app.sessions[t] = Session{User: u, ExpiresAt: time.Now().Add(8 * time.Hour)}
 		app.auditLocked(u.Name, "Inicio de sesión")
-		_ = app.saveLocked()
+		_ = app.saveFastLocked()
 		app.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"token": t, "username": u.Username, "name": u.Name, "role": u.Role})
 	})
@@ -732,7 +741,7 @@ func main() {
 		app.mu.Lock()
 		delete(app.sessions, t)
 		app.auditLocked(u.Name, "Cierre de sesión")
-		err := app.saveLocked()
+		err := app.saveFastLocked()
 		app.mu.Unlock()
 		if err != nil {
 			writeJSON(w, 500, map[string]string{"error": "No fue posible registrar el cierre de sesión"})
@@ -748,7 +757,7 @@ func main() {
 		app.mu.RLock()
 		snoozed := app.store.SuggestionSnoozed
 		app.mu.RUnlock()
-		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.3 Corrección recepción", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
+		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.5 Estabilidad de sesión", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
 	}))
 	mux.HandleFunc("/api/backups", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -1189,7 +1198,7 @@ func main() {
 				merged = merged[len(merged)-500:]
 			}
 			app.store.NotificationReads[u.Username] = merged
-			if err := app.saveLocked(); err != nil {
+			if err := app.saveFastLocked(); err != nil {
 				writeJSON(w, 500, map[string]string{"error": "No fue posible guardar las notificaciones: " + err.Error()})
 				return
 			}

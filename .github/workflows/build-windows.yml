@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   build-windows:
-    name: Compilar EB Gestión 0.9.4
+    name: Compilar EB Gestión 0.9.5
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -49,7 +49,7 @@ jobs:
       - name: Publicar ejecutable e instalador
         uses: actions/upload-artifact@v4
         with:
-          name: EB-Gestion-Traspasos-y-Estabilidad-0.9.4
+          name: EB-Gestion-Estabilidad-Sesion-0.9.5
           path: |
             dist/EBGestion.exe
             dist/EBGestion-Setup.exe

@@ -1,4 +1,2 @@
-EB Gestión 0.9.6 · Barra y Caja
-
-Corrección enfocada en evitar bloqueos y timeouts durante sesiones largas.
-Mantiene las funciones y traspasos de la 0.9.4.
+EB Gestión 0.9.6.1 - Barra y Caja - Corrección
+Corrección urgente de interfaz conservando la estabilidad validada de 0.9.5.

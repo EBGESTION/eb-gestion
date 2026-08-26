@@ -757,7 +757,7 @@ func main() {
 		app.mu.RLock()
 		snoozed := app.store.SuggestionSnoozed
 		app.mu.RUnlock()
-		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.6 Barra y Caja", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
+		writeJSON(w, 200, map[string]any{"dataPath": app.path, "backupPath": app.backupDir(), "version": "0.9.6.1 Barra y Caja - Corrección", "lanIP": lanIP(), "suggestionSnoozed": snoozed})
 	}))
 	mux.HandleFunc("/api/backups", require(app, "admin_bodega", "gerencia")(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

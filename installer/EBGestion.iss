@@ -1,5 +1,5 @@
 #define MyAppName "EB Gestión"
-#define MyAppVersion "0.9.6"
+#define MyAppVersion "0.9.6.1"
 #define MyAppPublisher "Restaurante Entre Bahías"
 #define MyAppExeName "EBGestion.exe"
 

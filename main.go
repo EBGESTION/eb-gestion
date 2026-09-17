@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -2113,39 +2114,18 @@ func main() {
 
 	sub, _ := fs.Sub(embedded, "web")
 	mux.Handle("/", http.FileServer(http.FS(sub)))
-	port := 8080
-	for ; port <= 8090; port++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-		if err != nil {
-			continue
-		}
 
-		ip := lanIP()
-		localURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-		fmt.Printf("\nEB Gestión 1.0 Desktop - Entre Bahías activa\nPC: %s\nTeléfono: http://%s:%d\nDatos: %s\nRespaldos: %s\n\n", localURL, ip, port, dataDir, app.backupDir())
-
-		serveErr := make(chan error, 1)
-		go func() {
-			serveErr <- http.Serve(ln, mux)
-		}()
-
-		// La ventana de escritorio usa WebView2 en Windows. El servidor continúa
-		// escuchando en la red local para Cocina, Gerencia y los demás equipos.
-		if err := runDesktop(localURL); err != nil {
-			fmt.Printf("No se pudo abrir la ventana de escritorio: %v\n", err)
-		}
-
-		_ = ln.Close()
-		select {
-		case err := <-serveErr:
-			if err != nil && err != http.ErrServerClosed && !strings.Contains(err.Error(), "use of closed network connection") {
-				fmt.Printf("El servidor terminó con error: %v\n", err)
-			}
-		case <-time.After(2 * time.Second):
-		}
-		return
+	// En Render no existe escritorio gráfico: solo levantamos el servidor web.
+	// Render entrega el puerto mediante la variable de entorno PORT.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // puerto local para seguir probando en el PC
 	}
-	fmt.Println("No fue posible iniciar EB Gestión: los puertos 8080 a 8090 están ocupados.")
+
+	fmt.Printf("\nEB Gestión Cloud/App - servidor web activo\nPuerto: %s\nDatos: %s\nRespaldos: %s\n\n", port, dataDir, app.backupDir())
+	if err := http.ListenAndServe(":"+port, mux); err != nil {
+		log.Fatalf("No fue posible iniciar el servidor web: %v", err)
+	}
 }
 func lanIP() string {
 	c, err := net.Dial("udp", "8.8.8.8:80")
